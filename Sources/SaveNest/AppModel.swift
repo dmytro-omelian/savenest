@@ -1,0 +1,221 @@
+import AppKit
+import SwiftUI
+import SaveNestCore
+import UniformTypeIdentifiers
+
+struct CaptureDraft: Identifiable {
+    var id: UUID { link.id }
+    var link: SavedLink
+    let action: CaptureAction
+}
+
+@MainActor
+final class AppModel: ObservableObject {
+    let account = AccountController()
+    @Published private(set) var library = Library()
+    @Published var filter = "All links"
+    @Published var query = ""
+    @Published var selectedID: UUID?
+    @Published var error: String?
+    @Published var isCapturing = false
+    @Published var showingAdd = false
+    @Published var shortcuts: [CaptureAction: CaptureShortcut]
+    @Published var shortcutErrors: [CaptureAction: String] = [:]
+    @Published var draft: CaptureDraft?
+    var shortcut: CaptureShortcut { shortcuts[.quick] ?? .standard }
+    var shortcutError: String? { shortcutErrors.values.first }
+    @Published var toast: CaptureNotice?
+    private let file: LibraryFile
+    private var loadFailed = false
+    let captureService = BrowserCapture()
+    let hotkey = GlobalShortcut()
+    var showLibrary: (() -> Void)?
+    var showSettings: (() -> Void)?
+    var showAccount: (() -> Void)?
+    var showToast: ((CaptureNotice) -> Void)?
+    var showCaptureEditor: ((CaptureDraft) -> Void)?
+    var closeCaptureEditor: (() -> Void)?
+
+    init() {
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        file = LibraryFile(url: support.appendingPathComponent("SaveNest/library.json"))
+        let stored = UserDefaults.standard.data(forKey: "captureShortcuts").flatMap { try? JSONDecoder().decode([String: CaptureShortcut].self, from: $0) } ?? [:]
+        let legacy = UserDefaults.standard.data(forKey: "captureShortcut").flatMap { try? JSONDecoder().decode(CaptureShortcut.self, from: $0) }
+        shortcuts = Dictionary(uniqueKeysWithValues: CaptureAction.allCases.map { action in
+            (action, stored[action.rawValue] ?? (action == .quick ? legacy : nil) ?? action.defaultShortcut)
+        })
+        do { library = try file.load() }
+        catch { loadFailed = true; self.error = "Your saved library couldn’t be opened. The original file has been kept untouched at \(file.url.path). Restore a valid backup there, then restart SaveNest. \(error.localizedDescription)" }
+        account.onChange = { [weak self] in self?.objectWillChange.send() }
+        hotkey.action = { [weak self] action in self?.capture(action: action) }
+        for action in hotkey.register(shortcuts) { shortcutErrors[action] = "Already in use. Choose another shortcut." }
+    }
+    var visibleLinks: [SavedLink] {
+        library.links.filter { link in
+            let included: Bool
+            switch filter {
+            case "All links": included = !link.isArchived
+            case "Favorites": included = link.isFavorite && !link.isArchived
+            case "Archive": included = link.isArchived
+            default: included = link.collection == filter && !link.isArchived
+            }
+            return included && link.matches(query)
+        }
+    }
+    var selected: SavedLink? { library.links.first { $0.id == selectedID } }
+    var activeCount: Int { library.links.filter { !$0.isArchived }.count }
+    @discardableResult private func commit(_ next: Library, captureFeedback: Bool = false) -> Bool {
+        func report(_ message: String) {
+            if captureFeedback { notify(CaptureNotice(title: "Couldn’t save your tab", message: message, isError: true)) }
+            else { error = message }
+        }
+        guard !loadFailed else { report("Your library couldn’t be opened. Restore a valid backup and restart SaveNest. Your original file is unchanged."); return false }
+        do { try file.save(next); library = next; return true }
+        catch { report("Couldn’t write to your library. \(error.localizedDescription)"); return false }
+    }
+    func capture(action: CaptureAction = .quick) {
+        if let draft { showCaptureEditor?(draft); return }
+        guard !isCapturing else { return }
+        isCapturing = true
+        Task { @MainActor in
+            defer { isCapturing = false }
+            guard await authorizeSaving() else { return }
+            let result: Result<[SavedLink], Error> = await withCheckedContinuation { continuation in
+                captureService.capture(allTabs: action == .window) { continuation.resume(returning: $0) }
+            }
+            switch result {
+            case .success(let links):
+                // A capture or permission dialog may have outlasted the account lease.
+                guard await authorizeSaving() else { return }
+                if action == .note || action == .tags, var link = links.first {
+                    if let existing = library.links.first(where: { Library.identity($0.url) == Library.identity(link.url) }) {
+                        let improved = link.title
+                        link = existing
+                        if LinkTitle.isGeneric(link.title) { link.title = improved }
+                    }
+                    beginDraft(link, action: action)
+                    return
+                }
+                var next = library
+                for link in links {
+                    if let index = next.links.firstIndex(where: { Library.identity($0.url) == Library.identity(link.url) }),
+                       LinkTitle.isGeneric(next.links[index].title), !LinkTitle.isGeneric(link.title) { next.links[index].title = link.title }
+                }
+                let added = next.insert(links)
+                guard commit(next, captureFeedback: true) else { return }
+                let title = added == 0 ? "Already saved" : (added == 1 ? "Tab saved" : "\(added) tabs saved")
+                let message = added == 0 ? "Already in your library. No duplicate added." : "Ready in your library whenever you need it."
+                notify(CaptureNotice(title: title, message: message))
+            case .failure(let failure):
+                let notice = (failure as? CaptureError)?.notice ?? CaptureNotice(title: "Couldn’t capture this tab", message: "Try again with a web page open in your browser.", isError: true)
+                notify(notice)
+            }
+        }
+    }
+    private func authorizeSaving() async -> Bool {
+        guard await account.authorize() else {
+            notify(CaptureNotice(title: account.hasLogin ? "Check your subscription" : "Sign in to save", message: account.message ?? "Open Account to start saving.", isError: true, opensAccount: true))
+            return false
+        }
+        return true
+    }
+    func presentAdd() {
+        Task { @MainActor in
+            if await authorizeSaving() { showingAdd = true }
+            else { showAccount?() }
+        }
+    }
+    @discardableResult func add(url: String, title: String, collection: String) async -> Bool {
+        guard await authorizeSaving() else { return false }
+        guard let valid = Library.validatedURL(url) else { error = "Enter a complete web address beginning with https:// or http://."; return false }
+        var next = library
+        let added = next.insert([SavedLink(url: valid.absoluteString, title: title, collection: collection)])
+        guard commit(next) else { return false }
+        notify(added == 0 ? "Already tucked away in your nest" : "Link saved")
+        return true
+    }
+    @discardableResult func update(_ link: SavedLink) async -> Bool {
+        guard await authorizeSaving() else { return false }
+        var next = library
+        guard let index = next.links.firstIndex(where: { $0.id == link.id }) else { return false }
+        next.links[index] = link; return commit(next)
+    }
+    func favorite(_ link: SavedLink) { var next = link; next.isFavorite.toggle(); Task { await update(next) } }
+    @discardableResult func archive(_ link: SavedLink) -> Bool { var next = library; guard let index = next.links.firstIndex(where: { $0.id == link.id }) else { return false }; next.links[index].isArchived.toggle(); if commit(next) { selectedID = nil; return true }; return false }
+    func delete(_ link: SavedLink) {
+        var next = library; next.links.removeAll { $0.id == link.id }
+        if commit(next) { selectedID = nil; notify("Link deleted") }
+    }
+    func configureShortcut(_ value: CaptureShortcut?, for action: CaptureAction) {
+        guard let value else { restoreShortcuts(); return }
+        if let duplicate = shortcuts.first(where: { $0.key != action && $0.value.keyCode == value.keyCode && $0.value.modifiers == value.modifiers }) {
+            restoreShortcuts(); shortcutErrors[action] = "Already used by ‘\(duplicate.key.title)’."; return
+        }
+        let previous = shortcuts
+        var candidate = shortcuts; candidate[action] = value
+        let failed = hotkey.register(candidate)
+        if failed.contains(action) {
+            _ = hotkey.register(previous)
+            shortcutErrors[action] = "Unavailable. Your previous shortcut is unchanged."
+        } else {
+            shortcuts = candidate; shortcutErrors[action] = nil
+            for other in failed { shortcutErrors[other] = "Already in use. Choose another shortcut." }
+            let saved = Dictionary(uniqueKeysWithValues: shortcuts.map { ($0.key.rawValue, $0.value) })
+            UserDefaults.standard.set(try? JSONEncoder().encode(saved), forKey: "captureShortcuts")
+        }
+    }
+    private func restoreShortcuts() {
+        for action in hotkey.register(shortcuts) { shortcutErrors[action] = "Unavailable. Choose another shortcut." }
+    }
+    func beginDraft(_ link: SavedLink, action: CaptureAction) {
+        if let draft { showCaptureEditor?(draft); return }
+        let draft = CaptureDraft(link: link, action: action)
+        self.draft = draft; showCaptureEditor?(draft)
+    }
+    @discardableResult func saveDraft(_ link: SavedLink) async -> Bool {
+        guard await authorizeSaving() else { return false }
+        var next = library
+        guard next.saveAnnotated(link) else { notify(CaptureNotice(title: "Couldn’t save this link", message: "The web address is invalid.", isError: true)); return false }
+        guard commit(next, captureFeedback: true) else { return false }
+        draft = nil; closeCaptureEditor?()
+        notify(CaptureNotice(title: "Link saved", message: "Your note and tags are safely in your library."))
+        return true
+    }
+    func cancelDraft() { draft = nil; closeCaptureEditor?() }
+    func notify(_ message: String) { notify(CaptureNotice(title: "SaveNest", message: message)) }
+    func notify(_ notice: CaptureNotice) {
+        toast = notice; showToast?(notice)
+        DispatchQueue.main.asyncAfter(deadline: .now() + notice.duration) { [weak self] in
+            if self?.toast?.id == notice.id { self?.toast = nil }
+        }
+    }
+    func open(_ link: SavedLink) {
+        guard let url = Library.validatedURL(link.url) else { error = "This link is not a valid web address."; return }
+        NSWorkspace.shared.open(url)
+    }
+    func copy(_ link: SavedLink) { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(link.url, forType: .string); notify("Link copied") }
+    func exportLibrary() {
+        let panel = NSSavePanel(); panel.allowedContentTypes = [.json]; panel.nameFieldStringValue = "SaveNest-backup.json"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do { try LibraryFile(url: url).save(library); notify("Library exported") }
+        catch { self.error = "Export failed: \(error.localizedDescription)" }
+    }
+    func importLibrary() {
+        Task { @MainActor in
+        guard await authorizeSaving() else { showAccount?(); return }
+        let panel = NSOpenPanel(); panel.allowedContentTypes = [.json]; panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard await authorizeSaving() else { return }
+        do {
+            let imported = try LibraryFile(url: url).load()
+            var next = library
+            // Imported identities must not collide with existing SwiftUI identities.
+            let links = imported.links.map { link -> SavedLink in var result = link; result.id = UUID(); return result }
+            let added = next.insert(links)
+            for name in imported.collections where !next.collections.contains(name) && !["All links", "Favorites", "Archive"].contains(name) { next.collections.append(name) }
+            if commit(next) { notify("Imported \(added) links") }
+        } catch { self.error = "This backup couldn’t be imported. \(error.localizedDescription)" }
+        }
+    }
+    func revealLibrary() { NSWorkspace.shared.selectFile(file.url.path, inFileViewerRootedAtPath: file.url.deletingLastPathComponent().path) }
+}

@@ -1,0 +1,181 @@
+import AppKit
+import SwiftUI
+
+@main
+@MainActor
+enum SaveNestApp {
+    static func main() {
+        let application = NSApplication.shared
+        let delegate = AppDelegate()
+        application.delegate = delegate
+        withExtendedLifetime(delegate) { application.run() }
+    }
+}
+
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+    private var model: AppModel!
+    private var libraryWindow: NSWindow!
+    private var settingsWindow: NSWindow?
+    private var accountWindow: NSWindow?
+    private var captureEditor: NSPanel?
+    private var returnToApp: NSRunningApplication?
+    private var editorDraftID: UUID?
+    private var statusItem: NSStatusItem!
+    private var toastPanel: NSPanel?
+    private var toastDismiss: DispatchWorkItem?
+    private var pendingURLs: [URL] = []
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.setActivationPolicy(.regular)
+        model = AppModel()
+        model.showLibrary = { [weak self] in self?.openLibrary() }
+        model.showAccount = { [weak self] in self?.openAccount() }
+        model.account.presentationWindow = { [weak self] in self?.accountWindow ?? self?.libraryWindow }
+        model.account.bringAccountForward = { [weak self] in self?.openAccount() }
+        model.showSettings = { [weak self] in self?.openSettings() }
+        model.showCaptureEditor = { [weak self] draft in self?.openCaptureEditor(draft) }
+        model.closeCaptureEditor = { [weak self] in self?.closeCaptureEditor() }
+        model.showToast = { [weak self] message in self?.presentToast(message) }
+        let root = LibraryView(model: model)
+        libraryWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 740, height: 680), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
+        libraryWindow.title = "SaveNest"; libraryWindow.titleVisibility = .hidden
+        libraryWindow.titlebarAppearsTransparent = true; libraryWindow.isReleasedWhenClosed = false
+        libraryWindow.backgroundColor = NSColor(Color.paper)
+        libraryWindow.contentView = NSHostingView(rootView: root)
+        libraryWindow.minSize = NSSize(width: 590, height: 480)
+        libraryWindow.setFrameAutosaveName("SaveNest.MinimalLibrary")
+        libraryWindow.center()
+        setupMenus(); setupStatusItem(); openLibrary()
+        let launchURLs = pendingURLs
+        pendingURLs.removeAll()
+        for url in launchURLs { model.account.handleIncomingURL(url) }
+        Task { await model.account.refresh() }
+        if model.shortcutError != nil { openSettings() }
+    }
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard model != nil else { pendingURLs.append(contentsOf: urls); return }
+        for url in urls { model.account.handleIncomingURL(url) }
+    }
+    func applicationDidBecomeActive(_ notification: Notification) {
+        if model != nil { Task { await model.account.synchronizeLogin() } }
+    }
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool { openLibrary(); return true }
+    @objc func openLibrary() { libraryWindow.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
+    @objc func openSettings() {
+        if settingsWindow == nil {
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 614, height: 660), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+            window.title = "SaveNest Settings"; window.isReleasedWhenClosed = false
+            window.contentView = NSHostingView(rootView: SettingsView(model: model)); window.center()
+            settingsWindow = window
+        }
+        settingsWindow?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+    }
+    @objc func openAccount() {
+        if accountWindow == nil {
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 660), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+            window.title = "SaveNest Account"; window.isReleasedWhenClosed = false
+            window.contentView = NSHostingView(rootView: AccountView(account: model.account)); window.center()
+            accountWindow = window
+        }
+        accountWindow?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+    }
+    @objc private func captureTab() { model.capture(action: .quick) }
+    @objc private func captureWindow() { model.capture(action: .window) }
+    @objc private func captureNote() { model.capture(action: .note) }
+    @objc private func captureTags() { model.capture(action: .tags) }
+    private func openCaptureEditor(_ draft: CaptureDraft) {
+        if editorDraftID == draft.id, let captureEditor {
+            captureEditor.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); return
+        }
+        let front = NSWorkspace.shared.frontmostApplication
+        returnToApp = front?.bundleIdentifier == Bundle.main.bundleIdentifier ? nil : front
+        let panel = NSPanel(contentRect: .zero, styleMask: [.titled, .closable, .utilityWindow], backing: .buffered, defer: false)
+        panel.title = draft.action.title; panel.isReleasedWhenClosed = false; panel.delegate = self
+        panel.level = .floating; panel.hidesOnDeactivate = false
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        let content = NSHostingView(rootView: QuickCaptureView(model: model, draft: draft))
+        panel.contentView = content; panel.setContentSize(content.fittingSize)
+        panel.center(); captureEditor = panel; editorDraftID = draft.id
+        panel.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+    }
+    private func closeCaptureEditor() {
+        captureEditor?.orderOut(nil); captureEditor = nil; editorDraftID = nil
+        if NSApp.isActive { returnToApp?.activate(options: []) }; returnToApp = nil
+    }
+    func windowWillClose(_ notification: Notification) {
+        if let window = notification.object as? NSWindow, window === captureEditor { model.cancelDraft() }
+    }
+    @objc private func addLink() { openLibrary(); model.presentAdd() }
+    @objc private func focusSearch() { openLibrary(); NotificationCenter.default.post(name: .focusSearch, object: nil) }
+    @objc private func exportLibrary() { model.exportLibrary() }
+    @objc private func importLibrary() { model.importLibrary() }
+    private func item(_ title: String, _ action: Selector, key: String = "") -> NSMenuItem {
+        let result = NSMenuItem(title: title, action: action, keyEquivalent: key); result.target = self; return result
+    }
+    private func setupStatusItem() {
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        if let image = NSImage(systemSymbolName: "square.stack.3d.up", accessibilityDescription: "SaveNest") { image.isTemplate = true; statusItem.button?.image = image }
+        let menu = NSMenu()
+        menu.addItem(item("Open SaveNest", #selector(openLibrary)))
+        menu.addItem(.separator())
+        menu.addItem(item("Save current tab", #selector(captureTab)))
+        menu.addItem(item("Save with a note…", #selector(captureNote)))
+        menu.addItem(item("Save with tags…", #selector(captureTags)))
+        menu.addItem(item("Save all tabs in this window", #selector(captureWindow)))
+        menu.addItem(item("Add a link…", #selector(addLink)))
+        menu.addItem(.separator()); menu.addItem(item("Account…", #selector(openAccount))); menu.addItem(item("Settings…", #selector(openSettings)))
+        menu.addItem(NSMenuItem(title: "Quit SaveNest", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        statusItem.menu = menu
+    }
+    private func setupMenus() {
+        let main = NSMenu()
+        let app = NSMenu(); app.addItem(item("Account…", #selector(openAccount))); app.addItem(item("Settings…", #selector(openSettings), key: ",")); app.addItem(.separator())
+        app.addItem(NSMenuItem(title: "Hide SaveNest", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h"))
+        app.addItem(NSMenuItem(title: "Quit SaveNest", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        let appRoot = NSMenuItem(); appRoot.submenu = app; main.addItem(appRoot)
+        let file = NSMenu(title: "File")
+        file.addItem(item("Add Link…", #selector(addLink), key: "n")); file.addItem(item("Open Library", #selector(openLibrary), key: "0"))
+        file.addItem(.separator()); file.addItem(item("Save Current Browser Tab", #selector(captureTab))); file.addItem(item("Save with a Note…", #selector(captureNote))); file.addItem(item("Save with Tags…", #selector(captureTags))); file.addItem(item("Save Browser Window", #selector(captureWindow)))
+        file.addItem(.separator()); file.addItem(item("Import Backup…", #selector(importLibrary))); file.addItem(item("Export Backup…", #selector(exportLibrary)))
+        file.addItem(.separator()); file.addItem(NSMenuItem(title: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w"))
+        let fileRoot = NSMenuItem(title: "File", action: nil, keyEquivalent: ""); fileRoot.submenu = file; main.addItem(fileRoot)
+        let edit = NSMenu(title: "Edit")
+        for (title, action, key) in [("Undo", Selector(("undo:")), "z"), ("Cut", #selector(NSText.cut(_:)), "x"), ("Copy", #selector(NSText.copy(_:)), "c"), ("Paste", #selector(NSText.paste(_:)), "v"), ("Select All", #selector(NSText.selectAll(_:)), "a")] { edit.addItem(NSMenuItem(title: title, action: action, keyEquivalent: key)) }
+        edit.addItem(.separator()); edit.addItem(item("Find…", #selector(focusSearch), key: "f"))
+        let editRoot = NSMenuItem(title: "Edit", action: nil, keyEquivalent: ""); editRoot.submenu = edit; main.addItem(editRoot)
+        NSApp.mainMenu = main
+    }
+    private func presentToast(_ notice: CaptureNotice) {
+        toastDismiss?.cancel(); toastPanel?.orderOut(nil)
+        let panel = CaptureNoticePanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel.title = "SaveNest notification"
+        panel.level = .statusBar; panel.isOpaque = false; panel.backgroundColor = .clear; panel.hasShadow = true
+        panel.hidesOnDeactivate = false
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        let content = NSHostingView(rootView: CaptureNoticeView(notice: notice, dismiss: { [weak panel] in
+            panel?.orderOut(nil)
+        }, openSettings: { [weak panel] in
+            panel?.orderOut(nil)
+            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")!)
+        }, openAccount: { [weak self, weak panel] in
+            panel?.orderOut(nil); self?.openAccount()
+        }))
+        panel.contentView = content
+        let size = content.fittingSize
+        panel.setContentSize(size)
+        let mouse = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) ?? NSScreen.main
+        if let frame = screen?.visibleFrame {
+            panel.setFrameOrigin(NSPoint(x: frame.maxX - size.width - 24, y: frame.maxY - size.height - 20))
+        }
+        // Never activate SaveNest or make the panel key: typing stays in the browser.
+        panel.orderFrontRegardless(); toastPanel = panel
+        let dismiss = DispatchWorkItem { [weak panel] in panel?.orderOut(nil) }; toastDismiss = dismiss
+        DispatchQueue.main.asyncAfter(deadline: .now() + notice.duration, execute: dismiss)
+        NSAccessibility.post(element: panel, notification: .announcementRequested, userInfo: [
+            .announcement: "\(notice.title). \(notice.message)",
+            .priority: NSAccessibilityPriorityLevel.high.rawValue
+        ])
+    }
+}

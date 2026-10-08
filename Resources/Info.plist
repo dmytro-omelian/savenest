@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleDevelopmentRegion</key><string>en</string>
+<key>CFBundleExecutable</key><string>SaveNest</string>
+<key>CFBundleIdentifier</key><string>app.savenest.mac</string>
+<key>CFBundleName</key><string>SaveNest</string>
+<key>CFBundleDisplayName</key><string>SaveNest</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleShortVersionString</key><string>0.3.0</string>
+<key>CFBundleVersion</key><string>4</string>
+<key>CFBundleURLTypes</key><array><dict><key>CFBundleURLName</key><string>app.savenest.mac.auth</string><key>CFBundleURLSchemes</key><array><string>savenest</string></array><key>CFBundleTypeRole</key><string>Editor</string></dict></array>
+<key>LSMinimumSystemVersion</key><string>14.0</string>
+<key>NSHighResolutionCapable</key><true/>
+<key>NSPrincipalClass</key><string>NSApplication</string>
+<key>CFBundleIconFile</key><string>AppIcon</string>
+<key>NSAppleEventsUsageDescription</key><string>SaveNest reads the title and address of browser tabs when you use the capture shortcut or menu. Your tabs stay open and your saved links stay on your Mac.</string>
+</dict></plist>
