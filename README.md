@@ -58,7 +58,7 @@ Direct capture adapters: Safari, Safari Technology Preview, Chrome, Chrome Beta,
 
 ## Open-tab search
 
-Press **⌘⇧O** from any app to open a compact tab switcher. Search words across tab titles, URLs, and browser names; title matches rank first. **↑/↓** selects, **Return** switches to the existing tab, **⌘1–9** jumps directly, and **Escape** closes the panel. The shortcut is configurable in Settings. The list refreshes on opening and can be refreshed manually; cached results remain searchable during refresh. Safari and the supported Chromium adapters expose tabs in their open windows. Hidden Safari tab groups, Firefox, and embedded browser views are not included. Tab titles and URLs remain in memory only.
+Press **⌘⇧O** from any app to open only the compact tab switcher, without activating SaveNest or raising the library. Clicking outside the switcher dismisses it. Search words across tab titles, URLs, and browser names; title matches rank first. **↑/↓** selects, **Return** switches to the existing tab, **⌘1–9** jumps directly, and **Escape** closes the panel. The shortcut is configurable in Settings. The list refreshes on opening and can be refreshed manually; cached results remain searchable during refresh. Safari and the supported Chromium adapters expose tabs in their open windows. Hidden Safari tab groups, Firefox, and embedded browser views are not included. Tab titles and URLs remain in memory only.
 
 ## Library
 

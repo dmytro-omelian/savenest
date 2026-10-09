@@ -71,10 +71,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc func openLibrary() { libraryWindow.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
     @objc private func openTabSearch() {
         if tabSearchPanel == nil {
-            let panel = TabSearchPanel(contentRect: .zero, styleMask: [.borderless], backing: .buffered, defer: false)
+            let panel = TabSearchPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
             panel.title = "Search open tabs"; panel.titleVisibility = .hidden
             panel.titlebarAppearsTransparent = true; panel.isReleasedWhenClosed = false
-            panel.level = .floating; panel.hidesOnDeactivate = true
+            panel.level = .floating; panel.hidesOnDeactivate = false
             panel.isOpaque = false; panel.backgroundColor = .clear; panel.hasShadow = true
             panel.isMovableByWindowBackground = true
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
@@ -82,7 +82,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             panel.center(); tabSearchPanel = panel
         }
         model.tabSearch.query = ""; model.tabSearch.refresh()
-        tabSearchPanel?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+        // Take keyboard focus without activating SaveNest and raising its library windows.
+        tabSearchPanel?.makeKeyAndOrderFront(nil)
     }
     @objc func openSettings() {
         if settingsWindow == nil {
@@ -228,4 +229,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
 private final class TabSearchPanel: NSPanel {
     override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+    override func resignKey() {
+        super.resignKey()
+        orderOut(nil)
+    }
 }
