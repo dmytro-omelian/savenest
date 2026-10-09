@@ -123,7 +123,7 @@ final class LibraryTests {
             SaveNestAccount(user: user, subscription: .init(active: active, plan: plan, status: status, mode: mode, renewsAt: end))
         }
         XCTAssertTrue(AccountAccess.allowsSaving(account(), verifiedAt: now, now: now))
-        XCTAssertTrue(AccountAccess.allowsSaving(account(mode: "live", plan: "annual"), verifiedAt: now.addingTimeInterval(-119), now: now))
+        XCTAssertFalse(AccountAccess.allowsSaving(account(mode: "live", plan: "annual"), verifiedAt: now.addingTimeInterval(-119), now: now))
         XCTAssertFalse(AccountAccess.allowsSaving(account(), verifiedAt: nil, now: now))
         XCTAssertFalse(AccountAccess.allowsSaving(account(), verifiedAt: now.addingTimeInterval(-120), now: now))
         XCTAssertFalse(AccountAccess.allowsSaving(account(), verifiedAt: now.addingTimeInterval(1), now: now))

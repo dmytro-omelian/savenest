@@ -21,8 +21,7 @@ Choose **SaveNest → Account**, enter your email in the app, and choose **Email
 
 Saving requires an active subscription:
 
-- **Monthly:** $10/month. Code **NESTBETA50** gives $5/month for the first 3 months, then $10/month.
-- **Yearly:** $100/year. The same code gives $50 for the first year, then $100/year.
+- **SaveNest:** $1.99/month. One plan includes every feature; cancel anytime.
 
 Plan selection stays in the Account screen. SaveNest opens Stripe only for the secure card/payment step, then the website returns to the app and SaveNest checks access automatically for up to one minute. A manual **Refresh access** remains available if Stripe confirmation is delayed. A **Sandbox · test payments only** label identifies a Stripe sandbox account. Use card `4242 4242 4242 4242`, any future expiration, and any CVC; no real payment is taken in sandbox.
 

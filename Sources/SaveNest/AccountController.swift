@@ -266,7 +266,7 @@ final class AccountController: NSObject, ObservableObject {
         } catch { if sessionGeneration == generation { message = friendly(error) } }
     }
     func checkout(plan: String) async {
-        guard ["monthly", "annual"].contains(plan) else { return }
+        guard plan == "monthly" else { return }
         await startBilling(flow: .checkout, plan: plan)
     }
     func openBilling() async { await startBilling(flow: .billing, plan: nil) }
@@ -316,7 +316,7 @@ final class AccountController: NSObject, ObservableObject {
                 guard billingPollID == id, accessToken == token, !Task.isCancelled else { return }
                 if active { billingStage = .idle; message = "You’re ready to save links."; billingPoll = nil; return }
                 if returned.status == .cancelled {
-                    billingStage = .idle; message = "Checkout was cancelled. You can choose a plan when you’re ready."; billingPoll = nil; return
+                    billingStage = .idle; message = "Checkout was cancelled. You can subscribe when you’re ready."; billingPoll = nil; return
                 }
                 if returned.flow == .billing && !subscriptionUnavailable {
                     billingStage = .idle; message = "Your billing changes are up to date."; billingPoll = nil; return

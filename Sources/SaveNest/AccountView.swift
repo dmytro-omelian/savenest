@@ -6,7 +6,7 @@ struct AccountView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 HStack(spacing: 10) { NestMark().frame(width: 30, height: 30); Text("savenest").font(.system(size: 23, weight: .semibold)).tracking(-0.8) }
-                sheetHeading(account.hasLogin ? "Your little corner." : "A home for your good finds.", subtitle: account.hasLogin ? "Your account and subscription." : "Sign in, choose a plan, and start saving.")
+                sheetHeading(account.hasLogin ? "Your little corner." : "A home for your good finds.", subtitle: account.hasLogin ? "Your account and subscription." : "Sign in, subscribe for $1.99/month, and start saving.")
                 if let details = account.account {
                     VStack(alignment: .leading, spacing: 7) {
                         Text(details.user.name.isEmpty ? "Your account" : details.user.name).font(.system(size: 16, weight: .medium))
@@ -17,7 +17,7 @@ struct AccountView: View {
                         } else {
                             Text(account.subscriptionUnavailable || details.subscription.active
                                  ? "Refresh access to verify your subscription."
-                                 : account.hasExistingSubscription ? "Review your existing subscription in billing to restore access." : "Choose a plan below to unlock saving.")
+                                 : account.hasExistingSubscription ? "Review your existing subscription in billing to restore access." : "Subscribe below to unlock saving.")
                                 .font(.system(size: 12)).foregroundStyle(Color.muted).padding(.top, 4)
                         }
                     }
@@ -51,10 +51,8 @@ struct AccountView: View {
                     }
                 } else if account.canChoosePlan {
                     VStack(spacing: 12) {
-                        plan("Monthly", amount: "$10 / month", offer: "$5 / month for the first 3 months", renewal: "Then $10/month. Cancel anytime.", value: "monthly")
-                        plan("Yearly", amount: "$100 / year", offer: "$50 for your first year", renewal: "Then $100/year. Cancel anytime.", value: "annual")
+                        plan("Monthly", amount: "$1.99 / month", offer: "Everything in SaveNest", renewal: "One simple plan. Cancel anytime.", value: "monthly")
                     }
-                    Text("Enter NESTBETA50 at checkout for the beta offer.").font(.system(size: 11)).foregroundStyle(Color.muted).textSelection(.enabled)
                 }
                 if let message = account.message {
                     Text(message).font(.system(size: 12)).foregroundStyle(Color.muted).fixedSize(horizontal: false, vertical: true)
@@ -78,7 +76,7 @@ struct AccountView: View {
             HStack { Text(title).font(.system(size: 15, weight: .medium)); Spacer(); Text(amount).font(.system(size: 13)) }
             Text(offer).font(.system(size: 13, weight: .medium)).foregroundStyle(Color.sage)
             Text(renewal).font(.system(size: 11)).foregroundStyle(Color.muted)
-            Button("Choose \(title.lowercased()) ↗") { Task { await account.checkout(plan: value) } }.buttonStyle(QuietButton()).disabled(account.isBusy)
+            Button("Subscribe for $1.99 ↗") { Task { await account.checkout(plan: value) } }.buttonStyle(QuietButton()).disabled(account.isBusy)
         }.padding(17).frame(maxWidth: .infinity, alignment: .leading).background(Color.white.opacity(0.75), in: RoundedRectangle(cornerRadius: 11))
     }
 }
