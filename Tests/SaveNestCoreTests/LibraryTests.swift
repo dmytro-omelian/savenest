@@ -204,6 +204,34 @@ final class LibraryTests {
         XCTAssertEqual(billing.consume(returnURL, userID: "user-one", now: now.addingTimeInterval(1)), NativeBillingReturn(flow: .checkout, status: .success))
         XCTAssertNil(billing.consume(returnURL, userID: "user-one", now: now.addingTimeInterval(2)))
     }
+    @MainActor func testBillingPollFindsDelayedPaymentWithoutCallback() async {
+        var time = Date(timeIntervalSince1970: 1_000)
+        let deadline = time.addingTimeInterval(60)
+        var checks = 0
+        let result = await BillingAccessPoll.run(until: deadline, now: { time }, sleep: { time = time.addingTimeInterval($0) }) {
+            checks += 1
+            // Stripe first reports unpaid, then temporary unavailability, then verified access.
+            return checks == 3
+        }
+        XCTAssertTrue(result); XCTAssertEqual(checks, 3)
+        XCTAssertEqual(time.timeIntervalSince1970, 1_010)
+    }
+    @MainActor func testBillingPollTimesOutWithoutGrantingAccess() async {
+        var time = Date(timeIntervalSince1970: 1_000)
+        let deadline = time.addingTimeInterval(12)
+        var checks = 0
+        let result = await BillingAccessPoll.run(until: deadline, now: { time }, sleep: { time = time.addingTimeInterval($0) }) {
+            checks += 1; return false
+        }
+        XCTAssertFalse(result); XCTAssertEqual(checks, 3); XCTAssertEqual(time, deadline)
+    }
+    @MainActor func testBillingPollStopsOnCancellation() async {
+        var checks = 0
+        let result = await BillingAccessPoll.run(until: Date().addingTimeInterval(60), sleep: { _ in throw CancellationError() }) {
+            checks += 1; return false
+        }
+        XCTAssertFalse(result); XCTAssertEqual(checks, 1)
+    }
     func testCorruptOrFutureLibraryThrowsWithoutChangingFile() throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: url) }
@@ -228,7 +256,7 @@ func XCTAssertThrowsError<T>(_ expression: @autoclosure () throws -> T) {
     do { _ = try expression() } catch { return }; preconditionFailure("Expected an error")
 }
 @main enum Checks {
-    static func main() throws {
+    @MainActor static func main() async throws {
         let tests = LibraryTests()
         tests.testCaptureDeduplicatesWithinBatchAndAcrossSaves()
         tests.testMeaningfulQueriesAndFragmentsArePreserved()
@@ -247,6 +275,9 @@ func XCTAssertThrowsError<T>(_ expression: @autoclosure () throws -> T) {
         tests.testSignInCallbackRejectsForgedOrAmbiguousURLs()
         tests.testPendingNativeCallbacksAreSingleUseAndBoundToStateAndAccount()
         tests.testCheckoutUsesExistingSubscriptionForPaymentRecovery()
-        print("Passed 17 SaveNest checks")
+        await tests.testBillingPollFindsDelayedPaymentWithoutCallback()
+        await tests.testBillingPollTimesOutWithoutGrantingAccess()
+        await tests.testBillingPollStopsOnCancellation()
+        print("Passed 20 SaveNest checks")
     }
 }

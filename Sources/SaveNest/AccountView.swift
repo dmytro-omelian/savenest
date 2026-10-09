@@ -59,8 +59,11 @@ struct AccountView: View {
                 }
                 if account.hasLogin {
                     HStack(spacing: 16) {
-                        Button("Refresh access") { Task { await account.refresh() } }.buttonStyle(QuietButton()).disabled(account.isBusy)
+                        Button("Refresh access") { Task { await account.refresh(force: true) } }.buttonStyle(QuietButton()).disabled(account.isBusy)
                         if account.canManageBilling { Button("Manage billing ↗") { Task { await account.openBilling() } }.buttonStyle(.link).disabled(account.isBusy) }
+                        if account.billingStage == .waiting || account.billingStage == .checking {
+                            Button("Stop waiting") { account.cancelBilling() }.buttonStyle(.link)
+                        }
                         if account.isBusy { ProgressView().controlSize(.small) }
                         Spacer()
                         Button("Sign out") { account.signOut() }.buttonStyle(.link).disabled(account.isBusy)

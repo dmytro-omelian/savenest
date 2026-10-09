@@ -56,7 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let launchURLs = pendingURLs
         pendingURLs.removeAll()
         for url in launchURLs { model.account.handleIncomingURL(url) }
-        if !model.isPreview { Task { await model.account.refresh() } }
+        if !model.isPreview { Task { await model.account.synchronizeLogin() } }
         if model.shortcutError != nil { openSettings() }
     }
     func application(_ application: NSApplication, open urls: [URL]) {
@@ -101,6 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             accountWindow = window
         }
         accountWindow?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+        if !model.isPreview { Task { await model.account.synchronizeLogin() } }
     }
     @objc private func captureTab() { model.capture(action: .quick) }
     @objc private func captureWindow() { model.capture(action: .window) }

@@ -23,7 +23,7 @@ Saving requires an active subscription:
 
 - **SaveNest:** $1.99/month. One plan includes every feature; cancel anytime.
 
-Plan selection stays in the Account screen. SaveNest opens Stripe only for the secure card/payment step, then the website returns to the app and SaveNest checks access automatically for up to one minute. A manual **Refresh access** remains available if Stripe confirmation is delayed. A **Sandbox · test payments only** label identifies a Stripe sandbox account. Use card `4242 4242 4242 4242`, any future expiration, and any CVC; no real payment is taken in sandbox.
+Plan selection stays in the Account screen. SaveNest opens Stripe only for the secure card/payment step, then the website returns to the app. SaveNest checks server-verified access every five seconds for up to 15 minutes after opening Stripe, even without a browser callback. Checks resume when you return to the app or reopen Account, including after a restart. Returning to the app requests fresh server access instead of the two-minute cache. A valid checkout return also retries for up to one minute if payment confirmation is delayed. **Stop waiting** cancels local checks without changing a payment; **Refresh access** remains available as a fallback and forces a server check. A **Sandbox · test payments only** label identifies a Stripe sandbox account. Use card `4242 4242 4242 4242`, any future expiration, and any CVC; no real payment is taken in sandbox.
 
 The server checks paid access; a checkout redirect alone does not unlock the app. The app rechecks before saving when the last successful check is more than two minutes old, after the paid period ends, and when returning to the app. No subscription entitlement is saved to disk. Network failures after that brief in-memory lease prevent new saves until verification succeeds. Existing links remain available to open, search, copy, archive, delete, and export when signed out or unsubscribed. Saving new links, notes, tags, title edits, and imports requires verified access.
 
@@ -89,7 +89,7 @@ swift run SaveNestChecks
 node scripts/check-metadata.mjs
 ```
 
-Seventeen Swift checks cover library persistence, dates, browser selection, legacy migration, tags, keyword ranking, tag counts, annotation updates, title fallback, paid-access expiry, subscription payment recovery, and forged, mismatched, or replayed native callbacks. Four additional Node checks execute the actual page reader against DOM fixtures, including unrelated posts and feed pages. The runner works with Command Line Tools alone; it does not require Xcode's XCTest framework.
+Twenty Swift checks cover library persistence, dates, browser selection, legacy migration, tags, keyword ranking, tag counts, annotation updates, title fallback, paid-access expiry, subscription payment recovery, delayed automatic access checks, polling timeout/cancellation, and forged, mismatched, or replayed native callbacks. Four additional Node checks execute the actual page reader against DOM fixtures, including unrelated posts and feed pages. The runner works with Command Line Tools alone; it does not require Xcode's XCTest framework.
 
 A read-only design fixture is available in debug builds with `.build/debug/SaveNest --ui-preview`. It does not load or write the saved library or register global shortcuts.
 

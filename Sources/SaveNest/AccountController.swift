@@ -239,7 +239,7 @@ final class AccountController: NSObject, ObservableObject {
         do {
             let sharedToken = try AccountKeychain.token()
             if sharedToken == previousToken {
-                if refreshExisting && hasLogin && billingStage != .checking { _ = await refresh() }
+                if refreshExisting && hasLogin && billingStage != .checking && billingPoll == nil { _ = await refresh(force: true) }
             } else if let sharedToken {
                 let response: AccountResponse = try await request("api/account", token: sharedToken)
                 guard sessionGeneration == generation, accessToken == previousToken, try AccountKeychain.token() == sharedToken else { return }
@@ -257,9 +257,12 @@ final class AccountController: NSObject, ObservableObject {
                 if let stored { restorePendingSignIn(stored) }
                 else if signInStage == .waiting || signInStage == .verifying { pendingSignIn = nil; signInStage = .idle }
             }
-            if billingStage != .preparing && billingStage != .checking {
+            if billingStage != .preparing && billingStage != .checking && billingPoll == nil {
                 let stored = try AccountKeychain.billing()
-                if let stored, stored.userID == account?.user.id { pendingBilling = stored; billingStage = .waiting }
+                if let stored, stored.userID == account?.user.id, let token = accessToken {
+                    pendingBilling = stored
+                    startAccessCheck(nil, token: token, pendingID: stored.id)
+                }
                 else { pendingBilling = nil; billingStage = .idle }
             }
             onChange?()
@@ -287,8 +290,8 @@ final class AccountController: NSObject, ObservableObject {
             guard result.url.scheme == "https", result.url.host == host, result.url.user == nil, result.url.password == nil,
                   result.url.port == nil || result.url.port == 443 else { throw AccountFailure.invalidResponse }
             guard NSWorkspace.shared.open(result.url) else { throw AccountFailure.service("Your browser couldn’t open Stripe. Check your default browser, then try again.") }
-            billingStage = .waiting
-            message = flow == .checkout ? "Finish payment in Stripe. SaveNest will check your access automatically when you return." : "Make your changes in Stripe, then use Return to SaveNest."
+            startAccessCheck(nil, token: token, pendingID: attempt.id)
+            message = flow == .checkout ? "Finish payment in Stripe. Your access will update automatically." : "Make your changes in Stripe, then return to SaveNest."
         } catch {
             if let created { try? AccountKeychain.cancelBilling(id: created.id) }
             guard sessionGeneration == generation else { return }
@@ -297,38 +300,50 @@ final class AccountController: NSObject, ObservableObject {
         }
     }
     private func finishBilling(_ url: URL) async {
+        if account == nil && hasLogin { _ = await refresh(force: true) }
         guard let userID = account?.user.id, let token = accessToken else { message = "Sign in to the account you used for payment, then check access here."; showAccount(); return }
         do {
             guard let result = try AccountKeychain.claimBilling(url, userID: userID) else {
-                message = "This billing return has expired, was already used, or belongs to another account. You can check access here safely."
+                message = canSave ? "You’re ready to save links." : "This billing return has expired, was already used, or belongs to another account. You can check access here safely."
                 showAccount(); return
             }
             pendingBilling = nil; startAccessCheck(result, token: token); showAccount()
         } catch { message = friendly(error); showAccount() }
     }
-    private func startAccessCheck(_ returned: NativeBillingReturn, token: String) {
-        billingPoll?.cancel(); let id = UUID(); billingPollID = id; billingStage = .checking
-        message = returned.status == .cancelled ? "Checking your account…" : "Checking your payment and subscription…"
+    private func startAccessCheck(_ returned: NativeBillingReturn?, token: String, pendingID: UUID? = nil) {
+        billingPoll?.cancel(); let id = UUID(); billingPollID = id
+        let generation = sessionGeneration
+        let waitingForPortal = returned == nil && pendingBilling?.flow == .billing
+        billingStage = returned == nil ? .waiting : .checking
+        message = returned?.status == .cancelled ? "Checking your account…" : "Checking your payment and subscription…"
         billingPoll = Task { @MainActor in
-            let deadline = Date().addingTimeInterval(60)
-            while !Task.isCancelled && Date() < deadline {
-                let active = await refresh(force: true, timeout: min(10, max(1, deadline.timeIntervalSinceNow)))
-                guard billingPollID == id, accessToken == token, !Task.isCancelled else { return }
-                if active { billingStage = .idle; message = "You’re ready to save links."; billingPoll = nil; return }
-                if returned.status == .cancelled {
-                    billingStage = .idle; message = "Checkout was cancelled. You can subscribe when you’re ready."; billingPoll = nil; return
+            let deadline = Date().addingTimeInterval(returned == nil ? 15 * 60 : 60)
+            let completed = await BillingAccessPoll.run(until: deadline) {
+                guard self.billingPollID == id, self.accessToken == token, self.sessionGeneration == generation, !Task.isCancelled else { return true }
+                let active = await self.refresh(force: true, timeout: min(10, max(1, deadline.timeIntervalSinceNow)))
+                guard self.billingPollID == id, self.accessToken == token, self.sessionGeneration == generation, !Task.isCancelled else { return true }
+                // An already-active account entering the portal must keep its return state.
+                if active && !waitingForPortal {
+                    if let pendingID { try? AccountKeychain.cancelBilling(id: pendingID) }
+                    self.pendingBilling = nil
+                    self.message = "You’re ready to save links."
+                    return true
                 }
-                if returned.flow == .billing && !subscriptionUnavailable {
-                    billingStage = .idle; message = "Your billing changes are up to date."; billingPoll = nil; return
+                if returned?.status == .cancelled {
+                    self.message = "Checkout was cancelled. You can subscribe when you’re ready."
+                    return true
                 }
-                message = subscriptionUnavailable ? "We couldn’t check your subscription yet. Retrying…" : "Waiting for Stripe to confirm your payment…"
-                let remaining = deadline.timeIntervalSinceNow
-                if remaining <= 0 { break }
-                do { try await Task.sleep(nanoseconds: UInt64(min(5, remaining) * 1_000_000_000)) } catch { return }
+                if returned?.flow == .billing && !self.subscriptionUnavailable {
+                    self.message = "Your billing changes are up to date."
+                    return true
+                }
+                self.message = self.subscriptionUnavailable ? "We couldn’t check your subscription yet. Retrying…" : waitingForPortal ? "Your subscription updates automatically while billing is open." : "Waiting for Stripe to confirm your payment…"
+                return false
             }
-            guard billingPollID == id, accessToken == token else { return }
-            billingStage = .idle; billingPoll = nil
-            message = "Your access hasn’t been confirmed yet. Choose Check access to try again. Your saved library is still available."
+            guard self.billingPollID == id, self.accessToken == token, self.sessionGeneration == generation, !Task.isCancelled else { return }
+            self.billingPoll = nil
+            self.billingStage = completed ? .idle : (self.pendingBilling == nil ? .idle : .waiting)
+            if !completed { self.message = "Still waiting for payment confirmation. We’ll check again when you return to SaveNest." }
         }
     }
     func cancelBilling() {
