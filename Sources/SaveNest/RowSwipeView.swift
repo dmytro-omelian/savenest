@@ -4,14 +4,16 @@ import SaveNestCore
 
 /// Observes a trackpad without intercepting row buttons or vertical scroll events.
 struct RowSwipeEvents: NSViewRepresentable {
+    var pointerInside: Bool
     var changed: (Double) -> Void
     var ended: (Bool) -> Void
     func makeNSView(context: Context) -> SwipeEventView { SwipeEventView() }
-    func updateNSView(_ view: SwipeEventView, context: Context) { view.changed = changed; view.ended = ended }
+    func updateNSView(_ view: SwipeEventView, context: Context) { view.pointerInside = pointerInside; view.changed = changed; view.ended = ended }
     static func dismantleNSView(_ view: SwipeEventView, coordinator: ()) { view.stop() }
 }
 
 final class SwipeEventView: NSView {
+    var pointerInside = false
     var changed: ((Double) -> Void)?
     var ended: ((Bool) -> Void)?
     private var monitor: Any?
@@ -36,7 +38,10 @@ final class SwipeEventView: NSView {
         if !event.momentumPhase.isEmpty { return consumed ? nil : event }
         if event.phase.contains(.began) || event.phase.contains(.mayBegin) {
             gesture = RowSwipe(); consumed = false
-            tracking = visibleRect.contains(convert(event.locationInWindow, from: nil))
+            // SwiftUI owns the row's visual geometry (including scroll and layer transforms).
+            // An embedded NSView's converted bounds can point at a different rendered row.
+            // Lock to the row SwiftUI reports under the pointer for this entire gesture.
+            tracking = pointerInside
         }
         guard tracking else { return event }
         if event.phase.contains(.cancelled) || event.phase.contains(.ended) {
@@ -57,11 +62,14 @@ struct SwipeableLink<Content: View>: View {
     let link: SavedLink
     @ObservedObject var model: AppModel
     @ViewBuilder var content: () -> Content
+    @State private var pointerInside = false
     @State private var offset = 0.0
     @State private var origin: Double?
 
     var body: some View {
-        ZStack {
+        // Background actions never participate in sizing: the original compact row owns its height.
+        content().background(Color.paper).offset(x: offset)
+        .background {
             HStack(spacing: 0) {
                 if offset > 0 {
                     action("Email", icon: "envelope", color: .sage) { close(); model.share(link) }
@@ -72,10 +80,11 @@ struct SwipeableLink<Content: View>: View {
                     action(link.isArchived ? "Restore" : "Archive", icon: link.isArchived ? "arrow.uturn.backward" : "archivebox", color: .sage) { archive() }
                 }
             }
-            content().background(Color.paper).offset(x: offset)
         }
         .clipShape(RoundedRectangle(cornerRadius: 10))
-        .background(RowSwipeEvents(changed: { delta in
+        .contentShape(Rectangle())
+        .onHover { pointerInside = $0 }
+        .background(RowSwipeEvents(pointerInside: pointerInside, changed: { delta in
             if origin == nil { origin = offset; model.swipedLinkID = link.id }
             offset = min(156, max(-210, (origin ?? 0) + delta))
         }, ended: { cancelled in

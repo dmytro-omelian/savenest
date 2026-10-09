@@ -44,13 +44,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         model.closeTabSelection = { [weak self] in self?.closeTabSelection() }
         model.showToast = { [weak self] message in self?.presentToast(message) }
         let root = LibraryView(model: model)
-        libraryWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 680), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
-        libraryWindow.title = "SaveNest"; libraryWindow.titleVisibility = .hidden
+        libraryWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 750, height: 680), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
+        libraryWindow.title = model.isPreview ? "SaveNest Preview — Sample library" : "SaveNest"; libraryWindow.titleVisibility = model.isPreview ? .visible : .hidden
         libraryWindow.titlebarAppearsTransparent = true; libraryWindow.isReleasedWhenClosed = false
         libraryWindow.backgroundColor = NSColor(Color.paper)
         libraryWindow.contentView = NSHostingView(rootView: root)
         libraryWindow.minSize = NSSize(width: 640, height: 520)
-        libraryWindow.setFrameAutosaveName("SaveNest.MinimalLibrary")
+        if !model.isPreview { libraryWindow.setFrameAutosaveName("SaveNest.MinimalLibrary") }
         libraryWindow.center()
         setupMenus(); setupStatusItem(); openLibrary()
         let launchURLs = pendingURLs

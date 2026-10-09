@@ -83,7 +83,16 @@ final class AppModel: ObservableObject {
             design.tags = ["Design", "Inspiration"]; design.isFavorite = true
             var reading = SavedLink(url: "https://example.com/reading", title: "A small collection of things worth keeping", browser: "Chrome")
             reading.tags = ["Read later"]; reading.createdAt = Date().addingTimeInterval(-86400)
-            library.insert([design, reading])
+            design.createdAt = Date().addingTimeInterval(-86400)
+            let samples = [
+                ("https://truto.one/", "Unified Accounting API — 25 Resources, 11 Integrations"),
+                ("https://www.swift.org/", "Swift — Build something great"),
+                ("https://developer.apple.com/design/", "Human Interface Guidelines — Apple Developer"),
+                ("https://www.wikipedia.org/", "A place to start exploring"),
+                ("https://www.w3.org/", "Web standards for everyone"),
+                ("https://example.org/", "A small collection of things worth reading")
+            ].map { SavedLink(url: $0.0, title: $0.1, browser: "Safari") }
+            library.insert(samples + [design, reading])
             return
         }
         #endif
