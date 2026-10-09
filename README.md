@@ -46,7 +46,7 @@ Use **SaveNest → Settings** (**⌘,**) to record each shortcut separately:
 | Save all tabs in the current window | ⌘⌥⇧K |
 | Search open tabs | ⌘⇧O |
 
-Choose **Save link** or **Save & close tab** from the menu beside the quick-save shortcut. Save-only is the default; your choice is remembered. Closing happens only after a successful library write (including a link already saved), and only for the originally captured browser tab. A navigated, missing, or ambiguous tab is left open with a saved-but-not-closed notice. Safari requires the original tab position and a unique URL; Chromium uses its tab ID. Note, tag, selected-tab, and whole-window capture keep tabs open.
+Use the **Close tab after saving** switch beneath the Save link shortcut. Save-only is the default; your choice is remembered. Closing happens only after a successful library write (including a link already saved), and only for the originally captured browser tab. A navigated, missing, or ambiguous tab is left open with a saved-but-not-closed notice. Safari requires the original tab position and a unique URL; Chromium uses its tab ID. Note, tag, selected-tab, and whole-window capture keep tabs open.
 
 Your previously configured quick-save shortcut is preserved. Choose a key with Command, Option, or Control. Escape cancels recording. Conflicts with another SaveNest action are rejected; an unavailable system shortcut leaves the previous binding unchanged. Each row has its own reset button.
 
