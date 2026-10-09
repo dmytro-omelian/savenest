@@ -137,6 +137,7 @@ final class BrowserCapture {
         let tabExpression = allTabs ? "w.tabs()" : (browser.safari ? "[w.currentTab()]" : "[w.activeTab()]")
         let encodedReader = String(data: try! JSONEncoder().encode(PageMetadata.script), encoding: .utf8)!
         let script = """
+        \(TabCloseScript.script)
         function run() {
             const app = Application('\(browser.id)');
             if (!app.running() || app.windows.length === 0) return '[]';
@@ -148,9 +149,9 @@ final class BrowserCapture {
                     if (!/^https?:/i.test(result.url)) return result;
                     if (\(prepareClose ? "true" : "false")) {
                         try {
-                            const urls = \(browser.safari ? "w.tabs().map(t => t.url())" : "[]");
-                            if (!\(browser.safari ? "true" : "false") || urls.filter(u => u === result.url).length === 1) {
-                                result.closeTarget = {windowID:w.id(), index:urls.indexOf(result.url), tabID:\(browser.safari ? "null" : "tab.id()"), url:result.url, safari:\(browser.safari ? "true" : "false"), browserID:'\(browser.id)', processID:\(processID)};
+                            const index = \(browser.safari ? "uniqueSafariTabIndex(w, result.url)" : "-1");
+                            if (!\(browser.safari ? "true" : "false") || index >= 0) {
+                                result.closeTarget = {windowID:w.id(), index:index, tabID:\(browser.safari ? "null" : "tab.id()"), url:result.url, safari:\(browser.safari ? "true" : "false"), browserID:'\(browser.id)', processID:\(processID)};
                             }
                         } catch (_) { /* Save still works when stable tab identity is unavailable. */ }
                     }
