@@ -7,18 +7,24 @@ struct AddLinkView: View {
     @State private var url = ""
     @State private var title = ""
     @State private var collection = "Inbox"
+    @State private var note = ""
+    @State private var tags: [String] = []
+    @State private var tagInput = ""
+    @State private var saving = false
     @FocusState private var focused: Bool
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             sheetHeading("A good find.", subtitle: "Give that link a little home.")
             VStack(alignment: .leading, spacing: 8) { fieldLabel("WEB ADDRESS"); TextField("https://…", text: $url).focused($focused) }
             VStack(alignment: .leading, spacing: 8) { fieldLabel("TITLE (OPTIONAL)"); TextField("Something worth keeping", text: $title) }
+            VStack(alignment: .leading, spacing: 8) { fieldLabel("NOTE"); NoteEditor(text: $note, height: 90) }
+            VStack(alignment: .leading, spacing: 8) { fieldLabel("TAGS"); TagEditor(tags: $tags, input: $tagInput, suggestions: model.allTags) }
             if let error = model.error { Text(error).font(.system(size: 11)).foregroundStyle(.red) }
             HStack {
                 Button("Paste URL") { if let value = NSPasteboard.general.string(forType: .string) { url = value.trimmingCharacters(in: .whitespacesAndNewlines) } }.buttonStyle(QuietButton())
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction).buttonStyle(.plain)
-                Button("Save link") { Task { if await model.add(url: url, title: title, collection: collection) { dismiss() } } }.buttonStyle(SageButton()).keyboardShortcut(.defaultAction).disabled(Library.validatedURL(url) == nil)
+                Button(saving ? "Saving…" : "Save link") { saving = true; Task { if await model.add(url: url, title: title, collection: collection, note: note, tags: tags + SavedLink.parseTags(tagInput)) { dismiss() }; saving = false } }.buttonStyle(SageButton()).keyboardShortcut(.return, modifiers: .command).disabled(saving || Library.validatedURL(url) == nil)
             }.padding(.top, 8)
         }.textFieldStyle(.roundedBorder).padding(32).frame(width: 470).background(Color.paper).foregroundStyle(Color.ink)
             .onAppear { focused = true; if model.library.collections.contains(model.filter) { collection = model.filter } }
@@ -30,6 +36,7 @@ struct LinkDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var confirmingDelete = false
     @State private var tagsText = ""
+    @State private var saving = false
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack(spacing: 12) {
@@ -45,11 +52,11 @@ struct LinkDetailView: View {
             Text(link.url).font(.system(size: 11)).foregroundStyle(Color.muted).lineLimit(3).textSelection(.enabled)
             VStack(alignment: .leading, spacing: 8) {
                 fieldLabel("A NOTE TO YOUR FUTURE SELF")
-                TextEditor(text: $link.note).font(.system(size: 12)).scrollContentBackground(.hidden).padding(8).frame(height: 105).background(Color.white, in: RoundedRectangle(cornerRadius: 7)).overlay(RoundedRectangle(cornerRadius: 7).stroke(Color.line))
+                NoteEditor(text: $link.note)
             }
             VStack(alignment: .leading, spacing: 8) {
                 fieldLabel("TAGS")
-                TextField("Tags, separated by commas", text: $tagsText).textFieldStyle(.roundedBorder)
+                TagEditor(tags: $link.tags, input: $tagsText, suggestions: model.allTags)
             }
             if let error = model.error { Text(error).font(.system(size: 11)).foregroundStyle(.red) }
             HStack {
@@ -61,10 +68,10 @@ struct LinkDetailView: View {
                 } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).frame(width: 30)
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction).buttonStyle(.plain)
-                Button("Save changes") { link.tags = SavedLink.parseTags(tagsText); Task { if await model.update(link) { dismiss() } } }.buttonStyle(SageButton()).keyboardShortcut(.defaultAction)
+                Button(saving ? "Saving…" : "Save changes") { link.tags = SavedLink.normalizedTags(link.tags + SavedLink.parseTags(tagsText)); saving = true; Task { if await model.update(link) { dismiss() }; saving = false } }.buttonStyle(SageButton()).keyboardShortcut(.return, modifiers: .command).disabled(saving)
             }
         }.padding(32).frame(width: 510).background(Color.paper).foregroundStyle(Color.ink)
-            .onAppear { tagsText = link.tags.joined(separator: ", ") }
+            .interactiveDismissDisabled()
             .alert("Delete this link?", isPresented: $confirmingDelete) {
                 Button("Cancel", role: .cancel) {}
                 Button("Delete", role: .destructive) { model.delete(link); dismiss() }
@@ -126,7 +133,7 @@ struct SettingsView: View {
             sheetHeading("Make yourself at home.", subtitle: "A few small things, just how you like them.")
             Button("Account & subscription…") { model.showAccount?() }.buttonStyle(QuietButton())
             VStack(alignment: .leading, spacing: 15) {
-                fieldLabel("CAPTURE SHORTCUTS")
+                fieldLabel("KEYBOARD SHORTCUTS")
                 ForEach(CaptureAction.allCases) { action in
                     VStack(alignment: .leading, spacing: 5) {
                         HStack {

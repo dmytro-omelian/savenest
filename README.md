@@ -44,6 +44,7 @@ Use **SaveNest → Settings** (**⌘,**) to record each shortcut separately:
 | Save with tags | ⌘⌃K |
 | Save selected tabs | ⌘⌃⇧K |
 | Save all tabs in the current window | ⌘⌥⇧K |
+| Search open tabs | ⌘⇧O |
 
 Your previously configured quick-save shortcut is preserved. Choose a key with Command, Option, or Control. Escape cancels recording. Conflicts with another SaveNest action are rejected; an unavailable system shortcut leaves the previous binding unchanged. Each row has its own reset button.
 
@@ -55,14 +56,20 @@ The foreground supported browser takes priority. From SaveNest or another non-br
 
 Direct capture adapters: Safari, Safari Technology Preview, Chrome, Chrome Beta, Brave, Edge, Arc, Vivaldi, Chromium, and Opera. These rely on each browser's scripting support; not all adapters have been exercised on this machine. Firefox doesn't expose the same tab scripting interface: copy a URL and use **+ → Paste URL** or **⌘N**.
 
+## Open-tab search
+
+Press **⌘⇧O** from any app to open a compact tab switcher. Search words across tab titles, URLs, and browser names; title matches rank first. **↑/↓** selects, **Return** switches to the existing tab, **⌘1–9** jumps directly, and **Escape** closes the panel. The shortcut is configurable in Settings. The list refreshes on opening and can be refreshed manually; cached results remain searchable during refresh. Safari and the supported Chromium adapters expose tabs in their open windows. Hidden Safari tab groups, Firefox, and embedded browser views are not included. Tab titles and URLs remain in memory only.
+
 ## Library
 
 - Links are grouped by local calendar date, newest first.
-- Click a row to open it in your default browser.
-- Search titles, URLs, notes, and tags with **⌘F**. Tags are entered with commas and deduplicated without case sensitivity.
+- Click a title to open it in your default browser; click a note preview to edit it. Row actions become more prominent on hover.
+- Search titles, URLs, notes, and tags with **⌘F**. All keywords must match somewhere; results are ranked by relevance. Use **#tag** to match a single-word tag exactly.
+- Click a tag pill or use the Tags menu to filter. All, Favorites, Notes, and Archive keep the library in one compact view.
+- Add tags with Return or commas, reuse suggestions, and click a tag to remove it. Saving includes any unfinished tag input; **⌘Return** saves the editor.
 - Existing libraries and backups without tags load automatically; notes and saved dates are preserved.
-- A row’s **…** menu has copy, quick note/tag editors, full details, and archive.
-- The top **…** menu opens Settings or the archive. Archived links can be restored.
+- A row’s **…** menu has copy, note/tag editing, and archive.
+- The top **…** menu opens Account or Settings. Archived links can be restored.
 - Duplicates are skipped without overwriting existing notes or dates.
 - Internal browser pages, local files, and URLs with embedded credentials are skipped.
 - Settings can export and merge-import JSON backups.
@@ -82,7 +89,9 @@ swift run SaveNestChecks
 node scripts/check-metadata.mjs
 ```
 
-Fifteen Swift checks cover library persistence, dates, browser selection, legacy migration, tags, annotation updates, title fallback, paid-access expiry, subscription payment recovery, and forged, mismatched, or replayed native callbacks. Four additional Node checks execute the actual page reader against DOM fixtures, including unrelated posts and feed pages. The runner works with Command Line Tools alone; it does not require Xcode's XCTest framework.
+Seventeen Swift checks cover library persistence, dates, browser selection, legacy migration, tags, keyword ranking, tag counts, annotation updates, title fallback, paid-access expiry, subscription payment recovery, and forged, mismatched, or replayed native callbacks. Four additional Node checks execute the actual page reader against DOM fixtures, including unrelated posts and feed pages. The runner works with Command Line Tools alone; it does not require Xcode's XCTest framework.
+
+A read-only design fixture is available in debug builds with `.build/debug/SaveNest --ui-preview`. It does not load or write the saved library or register global shortcuts.
 
 ## Distribution
 

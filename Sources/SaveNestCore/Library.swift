@@ -38,7 +38,7 @@ public struct SavedLink: Identifiable, Codable, Equatable {
     public static func parseTags(_ text: String) -> [String] { normalizedTags(text.components(separatedBy: ",")) }
     public var domain: String { URL(string: url)?.host?.replacingOccurrences(of: "www.", with: "") ?? url }
     public func matches(_ query: String) -> Bool {
-        query.isEmpty || ([title, url, note, collection, browser] + tags).contains { $0.localizedCaseInsensitiveContains(query) }
+        LinkSearch.score(query: query, title: title, url: url, note: note, tags: tags, extra: collection + " " + browser) != nil
     }
 }
 

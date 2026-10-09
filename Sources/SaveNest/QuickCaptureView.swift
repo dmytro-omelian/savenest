@@ -5,12 +5,13 @@ struct QuickCaptureView: View {
     @ObservedObject var model: AppModel
     let draft: CaptureDraft
     @State private var link: SavedLink
-    @State private var tags: String
+    @State private var tags = ""
+    @State private var saving = false
     @FocusState private var focus: Field?
-    private enum Field: Hashable { case note, tags }
+    private enum Field: Hashable { case note }
     init(model: AppModel, draft: CaptureDraft) {
         self.model = model; self.draft = draft
-        _link = State(initialValue: draft.link); _tags = State(initialValue: draft.link.tags.joined(separator: ", "))
+        _link = State(initialValue: draft.link)
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -28,13 +29,14 @@ struct QuickCaptureView: View {
                 Text("⌘↵ to save · Esc to cancel").font(.system(size: 10)).foregroundStyle(Color.muted)
                 Spacer()
                 Button("Cancel") { model.cancelDraft() }.keyboardShortcut(.cancelAction).buttonStyle(.plain)
-                Button("Save") {
-                    link.tags = SavedLink.parseTags(tags)
-                    Task { _ = await model.saveDraft(link) }
-                }.buttonStyle(SageButton()).keyboardShortcut(.return, modifiers: .command)
+                Button(saving ? "Saving…" : "Save") {
+                    link.tags = SavedLink.normalizedTags(link.tags + SavedLink.parseTags(tags))
+                    saving = true
+                    Task { _ = await model.saveDraft(link); saving = false }
+                }.buttonStyle(SageButton()).keyboardShortcut(.return, modifiers: .command).disabled(saving)
             }
         }.padding(24).frame(width: 460).background(Color.paper).foregroundStyle(Color.ink).preferredColorScheme(.light)
-            .onAppear { focus = draft.action == .note ? .note : .tags }
+            .onAppear { if draft.action == .note { focus = .note } }
     }
     private var noteField: some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -47,8 +49,7 @@ struct QuickCaptureView: View {
     private var tagsField: some View {
         VStack(alignment: .leading, spacing: 7) {
             fieldLabel("TAGS")
-            TextField("design, read later, inspiration", text: $tags).textFieldStyle(.roundedBorder).focused($focus, equals: .tags)
-            Text("Separate tags with commas.").font(.system(size: 10)).foregroundStyle(Color.muted)
+            TagEditor(tags: $link.tags, input: $tags, suggestions: model.allTags, initiallyFocused: draft.action == .tags)
         }
     }
 }

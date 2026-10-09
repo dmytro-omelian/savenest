@@ -22,6 +22,10 @@ final class AppModel: ObservableObject {
     @Published private(set) var library = Library()
     @Published var filter = "All links"
     @Published var query = ""
+    @Published var selectedTag: String?
+    @Published var notesOnly = false
+    let tabSearch = TabSearchModel()
+    var showTabSearch: (() -> Void)?
     @Published var selectedID: UUID?
     @Published var error: String?
     @Published var isCapturing = false
@@ -46,6 +50,11 @@ final class AppModel: ObservableObject {
     var showTabSelection: ((TabSelectionDraft) -> Void)?
     var closeTabSelection: (() -> Void)?
 
+    #if DEBUG
+    var isPreview: Bool { ProcessInfo.processInfo.arguments.contains("--ui-preview") }
+    #else
+    let isPreview = false
+    #endif
     init() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         file = LibraryFile(url: support.appendingPathComponent("SaveNest/library.json"))
@@ -54,6 +63,17 @@ final class AppModel: ObservableObject {
         shortcuts = Dictionary(uniqueKeysWithValues: CaptureAction.allCases.map { action in
             (action, stored[action.rawValue] ?? (action == .quick ? legacy : nil) ?? action.defaultShortcut)
         })
+        #if DEBUG
+        if isPreview {
+            var design = SavedLink(url: "https://example.com/design", title: "The details that make a Mac app feel at home", browser: "Safari")
+            design.note = "Bring this into the next design pass. Clear hierarchy, quiet surfaces, and keyboard shortcuts that stay out of the way."
+            design.tags = ["Design", "Inspiration"]; design.isFavorite = true
+            var reading = SavedLink(url: "https://example.com/reading", title: "A small collection of things worth keeping", browser: "Chrome")
+            reading.tags = ["Read later"]; reading.createdAt = Date().addingTimeInterval(-86400)
+            library.insert([design, reading])
+            return
+        }
+        #endif
         do { library = try file.load() }
         catch { loadFailed = true; self.error = "Your saved library couldn’t be opened. The original file has been kept untouched at \(file.url.path). Restore a valid backup there, then restart SaveNest. \(error.localizedDescription)" }
         account.onChange = { [weak self] in self?.objectWillChange.send() }
@@ -69,9 +89,12 @@ final class AppModel: ObservableObject {
             case "Archive": included = link.isArchived
             default: included = link.collection == filter && !link.isArchived
             }
-            return included && link.matches(query)
+            return included && link.matches(query) && (!notesOnly || !link.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) && (selectedTag == nil || link.tags.contains { LinkSearch.folded($0) == LinkSearch.folded(selectedTag!) })
         }
     }
+    var tagSummaries: [TagSummary] { TagSummary.summarize(library.links.filter { $0.isArchived == (filter == "Archive") }) }
+    var allTags: [String] { TagSummary.summarize(library.links).map(\.name) }
+    func clearFilters() { query = ""; selectedTag = nil; notesOnly = false }
     var selected: SavedLink? { library.links.first { $0.id == selectedID } }
     var activeCount: Int { library.links.filter { !$0.isArchived }.count }
     @discardableResult private func commit(_ next: Library, captureFeedback: Bool = false) -> Bool {
@@ -79,11 +102,13 @@ final class AppModel: ObservableObject {
             if captureFeedback { notify(CaptureNotice(title: "Couldn’t save your tab", message: message, isError: true)) }
             else { error = message }
         }
+        guard !isPreview else { error = "This is a read-only design preview."; return false }
         guard !loadFailed else { report("Your library couldn’t be opened. Restore a valid backup and restart SaveNest. Your original file is unchanged."); return false }
         do { try file.save(next); library = next; return true }
         catch { report("Couldn’t write to your library. \(error.localizedDescription)"); return false }
     }
     func capture(action: CaptureAction = .quick) {
+        if action == .search { showTabSearch?(); return }
         if let draft { showCaptureEditor?(draft); return }
         guard !isCapturing else { return }
         isCapturing = true
@@ -155,11 +180,17 @@ final class AppModel: ObservableObject {
             else { showAccount?() }
         }
     }
-    @discardableResult func add(url: String, title: String, collection: String) async -> Bool {
+    @discardableResult func add(url: String, title: String, collection: String, note: String = "", tags: [String] = []) async -> Bool {
         guard await authorizeSaving() else { return false }
         guard let valid = Library.validatedURL(url) else { error = "Enter a complete web address beginning with https:// or http://."; return false }
         var next = library
-        let added = next.insert([SavedLink(url: valid.absoluteString, title: title, collection: collection)])
+        var link = SavedLink(url: valid.absoluteString, title: title, collection: collection)
+        link.note = note; link.tags = SavedLink.normalizedTags(tags)
+        if next.links.contains(where: { Library.identity($0.url) == Library.identity(link.url) }) {
+            error = "This link is already saved. Open its note and tags from your library to edit it."
+            return false
+        }
+        let added = next.insert([link])
         guard commit(next) else { return false }
         notify(added == 0 ? "Already tucked away in your nest" : "Link saved")
         return true

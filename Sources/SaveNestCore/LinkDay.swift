@@ -4,6 +4,7 @@ public struct LinkDay: Identifiable {
     public let id: Date
     public let label: String
     public let links: [SavedLink]
+    public init(id: Date, label: String, links: [SavedLink]) { self.id = id; self.label = label; self.links = links }
     public static func group(_ links: [SavedLink], now: Date = Date(), calendar: Calendar = .current) -> [LinkDay] {
         let today = calendar.startOfDay(for: now)
         let yesterday = calendar.date(byAdding: .day, value: -1, to: today)

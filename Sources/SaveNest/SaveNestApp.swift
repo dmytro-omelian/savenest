@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var accountWindow: NSWindow?
     private var captureEditor: NSPanel?
     private var tabSelectionPanel: NSPanel?
+    private var tabSearchPanel: NSPanel?
     private var returnToApp: NSRunningApplication?
     private var editorDraftID: UUID?
     private var tabSelectionDraftID: UUID?
@@ -30,6 +31,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         model = AppModel()
+        model.showTabSearch = { [weak self] in self?.openTabSearch() }
+        model.tabSearch.close = { [weak self] in self?.tabSearchPanel?.orderOut(nil) }
         model.showLibrary = { [weak self] in self?.openLibrary() }
         model.showAccount = { [weak self] in self?.openAccount() }
         model.account.presentationWindow = { [weak self] in self?.accountWindow ?? self?.libraryWindow }
@@ -41,19 +44,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         model.closeTabSelection = { [weak self] in self?.closeTabSelection() }
         model.showToast = { [weak self] message in self?.presentToast(message) }
         let root = LibraryView(model: model)
-        libraryWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 740, height: 680), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
+        libraryWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 680), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
         libraryWindow.title = "SaveNest"; libraryWindow.titleVisibility = .hidden
         libraryWindow.titlebarAppearsTransparent = true; libraryWindow.isReleasedWhenClosed = false
         libraryWindow.backgroundColor = NSColor(Color.paper)
         libraryWindow.contentView = NSHostingView(rootView: root)
-        libraryWindow.minSize = NSSize(width: 590, height: 480)
+        libraryWindow.minSize = NSSize(width: 640, height: 520)
         libraryWindow.setFrameAutosaveName("SaveNest.MinimalLibrary")
         libraryWindow.center()
         setupMenus(); setupStatusItem(); openLibrary()
         let launchURLs = pendingURLs
         pendingURLs.removeAll()
         for url in launchURLs { model.account.handleIncomingURL(url) }
-        Task { await model.account.refresh() }
+        if !model.isPreview { Task { await model.account.refresh() } }
         if model.shortcutError != nil { openSettings() }
     }
     func application(_ application: NSApplication, open urls: [URL]) {
@@ -61,11 +64,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         for url in urls { model.account.handleIncomingURL(url) }
     }
     func applicationDidBecomeActive(_ notification: Notification) {
-        if model != nil { Task { await model.account.synchronizeLogin() } }
+        if model != nil && !model.isPreview { Task { await model.account.synchronizeLogin() } }
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool { openLibrary(); return true }
     @objc func openLibrary() { libraryWindow.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
+    @objc private func openTabSearch() {
+        if tabSearchPanel == nil {
+            let panel = TabSearchPanel(contentRect: .zero, styleMask: [.borderless], backing: .buffered, defer: false)
+            panel.title = "Search open tabs"; panel.titleVisibility = .hidden
+            panel.titlebarAppearsTransparent = true; panel.isReleasedWhenClosed = false
+            panel.level = .floating; panel.hidesOnDeactivate = true
+            panel.isOpaque = false; panel.backgroundColor = .clear; panel.hasShadow = true
+            panel.isMovableByWindowBackground = true
+            panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+            panel.contentView = NSHostingView(rootView: TabSearchView(model: model.tabSearch))
+            panel.center(); tabSearchPanel = panel
+        }
+        model.tabSearch.query = ""; model.tabSearch.refresh()
+        tabSearchPanel?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+    }
     @objc func openSettings() {
         if settingsWindow == nil {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 614, height: 660), styleMask: [.titled, .closable], backing: .buffered, defer: false)
@@ -142,6 +160,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if let image = NSImage(systemSymbolName: "square.stack.3d.up", accessibilityDescription: "SaveNest") { image.isTemplate = true; statusItem.button?.image = image }
         let menu = NSMenu()
         menu.addItem(item("Open SaveNest", #selector(openLibrary)))
+        menu.addItem(item("Search open tabs…", #selector(openTabSearch)))
         menu.addItem(.separator())
         menu.addItem(item("Save current tab", #selector(captureTab)))
         menu.addItem(item("Save with a note…", #selector(captureNote)))
@@ -160,6 +179,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         app.addItem(NSMenuItem(title: "Quit SaveNest", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         let appRoot = NSMenuItem(); appRoot.submenu = app; main.addItem(appRoot)
         let file = NSMenu(title: "File")
+        file.addItem(item("Search Open Tabs…", #selector(openTabSearch)))
         file.addItem(item("Add Link…", #selector(addLink), key: "n")); file.addItem(item("Open Library", #selector(openLibrary), key: "0"))
         file.addItem(.separator()); file.addItem(item("Save Current Browser Tab", #selector(captureTab))); file.addItem(item("Save with a Note…", #selector(captureNote))); file.addItem(item("Save with Tags…", #selector(captureTags))); file.addItem(item("Save Selected Tabs…", #selector(captureSelected))); file.addItem(item("Save Browser Window", #selector(captureWindow)))
         file.addItem(.separator()); file.addItem(item("Import Backup…", #selector(importLibrary))); file.addItem(item("Export Backup…", #selector(exportLibrary)))
@@ -203,4 +223,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             .priority: NSAccessibilityPriorityLevel.high.rawValue
         ])
     }
+}
+
+private final class TabSearchPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
 }

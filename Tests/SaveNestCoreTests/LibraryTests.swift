@@ -36,6 +36,26 @@ final class LibraryTests {
         XCTAssertTrue(link.matches("TYPOGRAPHY")); XCTAssertTrue(link.matches("inspiration"))
         XCTAssertTrue(link.matches("safari")); XCTAssertFalse(link.matches("missing"))
     }
+    func testKeywordSearchAcrossFieldsAndRanking() {
+        var link = SavedLink(url: "https://example.com/type", title: "Café typography")
+        link.note = "Use this for the launch"; link.tags = ["Design", "Research"]
+        XCTAssertTrue(link.matches("cafe launch"))
+        XCTAssertTrue(link.matches("typography #design"))
+        XCTAssertFalse(link.matches("typography #des"))
+        XCTAssertFalse(link.matches("cafe missing"))
+        XCTAssertTrue(link.matches("   "))
+        let titleScore = LinkSearch.score(query: "design", title: "Design systems", url: "https://example.com")!
+        let noteScore = LinkSearch.score(query: "design", title: "A bookmark", url: "https://example.com", note: "Design systems")!
+        XCTAssertTrue(titleScore > noteScore)
+        XCTAssertNil(LinkSearch.score(query: "unrelated", title: "Design", url: "https://example.com"))
+    }
+    func testTagCountsIgnoreCaseAndDuplicateTags() {
+        var first = SavedLink(url: "https://example.com/1", title: "One"); first.tags = ["Design", "design", "Work"]
+        var second = SavedLink(url: "https://example.com/2", title: "Two"); second.tags = ["design"]
+        let tags = TagSummary.summarize([first, second])
+        XCTAssertEqual(tags.count, 2); XCTAssertEqual(tags.first?.count, 2)
+        XCTAssertEqual(tags.first?.id, "design")
+    }
     func testDiskRoundTripAndMissingFile() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -214,6 +234,8 @@ func XCTAssertThrowsError<T>(_ expression: @autoclosure () throws -> T) {
         tests.testMeaningfulQueriesAndFragmentsArePreserved()
         tests.testRejectsUnsafeAndNonWebURLs()
         tests.testSearchIncludesNotesAndCollection()
+        tests.testKeywordSearchAcrossFieldsAndRanking()
+        tests.testTagCountsIgnoreCaseAndDuplicateTags()
         try tests.testDiskRoundTripAndMissingFile()
         try tests.testCorruptOrFutureLibraryThrowsWithoutChangingFile()
         tests.testDateGroupingUsesLocalDaysAndNewestFirst()
@@ -225,6 +247,6 @@ func XCTAssertThrowsError<T>(_ expression: @autoclosure () throws -> T) {
         tests.testSignInCallbackRejectsForgedOrAmbiguousURLs()
         tests.testPendingNativeCallbacksAreSingleUseAndBoundToStateAndAccount()
         tests.testCheckoutUsesExistingSubscriptionForPaymentRecovery()
-        print("Passed 15 SaveNest checks")
+        print("Passed 17 SaveNest checks")
     }
 }
