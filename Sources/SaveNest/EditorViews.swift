@@ -63,8 +63,10 @@ struct LinkDetailView: View {
                 Menu {
                     Button("Copy link") { model.copy(link) }
                     Button(link.isArchived ? "Restore to library" : "Archive link") { if model.archive(link) { dismiss() } }
-                    Divider()
-                    Button("Delete permanently…", role: .destructive) { confirmingDelete = true }
+                    if link.isArchived {
+                        Divider()
+                        Button("Delete permanently…", role: .destructive) { confirmingDelete = true }
+                    }
                 } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).frame(width: 30)
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction).buttonStyle(.plain)
@@ -166,6 +168,8 @@ struct SettingsView: View {
             }
             VStack(alignment: .leading, spacing: 13) {
                 fieldLabel("YOUR LIBRARY")
+                Text("Swipe left to archive a link, or right for Email and Copy. A long left swipe archives immediately; Undo appears at the bottom. In Archive, swipe left to restore.").font(.system(size: 11)).foregroundStyle(Color.muted).lineSpacing(4)
+                Text("Archive all links is in the library menu. Empty archive is inside Archive and asks before deleting permanently.").font(.system(size: 11)).foregroundStyle(Color.muted).lineSpacing(4)
                 HStack {
                     Button("Export backup…") { model.exportLibrary() }.buttonStyle(QuietButton())
                     Button("Import backup…") { model.importLibrary() }.buttonStyle(QuietButton())

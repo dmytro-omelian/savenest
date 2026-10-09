@@ -2,6 +2,48 @@ import Foundation
 import SaveNestCore
 
 final class LibraryTests {
+    func testArchiveUndoPreservesEditsAndExistingArchive() {
+        var library = Library()
+        var old = SavedLink(url: "https://example.com/old", title: "Old"); old.isArchived = true
+        let fresh = SavedLink(url: "https://example.com/new", title: "New")
+        library.links = [old, fresh]
+        let changed = library.setArchived(true, ids: Set(library.links.map(\.id)))
+        XCTAssertEqual(changed, [fresh.id])
+        library.links[1].note = "Edited after archiving"; library.links[1].tags = ["Keep"]
+        library.setArchived(false, ids: changed)
+        XCTAssertTrue(library.links[0].isArchived); XCTAssertFalse(library.links[1].isArchived)
+        XCTAssertEqual(library.links[1].note, "Edited after archiving"); XCTAssertEqual(library.links[1].tags, ["Keep"])
+    }
+    func testEmptyArchiveDeletesOnlyConfirmedStillArchivedLinks() {
+        var library = Library()
+        library.links = (0..<4).map { SavedLink(url: "https://example.com/\($0)", title: "\($0)") }
+        library.setArchived(true, ids: Set(library.links.prefix(2).map(\.id)))
+        let confirmed = Set(library.links.filter(\.isArchived).map(\.id))
+        library.links[1].isArchived = false // Restored while confirmation was open.
+        library.links[2].isArchived = true // Archived after the snapshot.
+        XCTAssertEqual(library.deleteArchived(ids: confirmed), 1)
+        XCTAssertEqual(library.links.map(\.title), ["1", "2", "3"])
+        XCTAssertEqual(library.deleteArchived(ids: confirmed), 0)
+    }
+    func testEmailShareOnlyIncludesExplicitlyChosenNote() {
+        var link = SavedLink(url: "https://example.com/article?q=one&x=two#section", title: "A title\nAnother line")
+        link.note = "Private saved note"
+        XCTAssertEqual(EmailShare.subject(link.title), "A title Another line")
+        XCTAssertEqual(EmailShare.body(link: link, note: link.note, includeNote: false), "A title Another line\n" + link.url)
+        XCTAssertEqual(EmailShare.body(link: link, note: "  A thought\nfor you  ", includeNote: true), "A thought\nfor you\n\nA title Another line\n" + link.url)
+        XCTAssertEqual(link.note, "Private saved note")
+    }
+    func testSwipeLocksDirectionAndRequiresIntentionalDistance() {
+        var vertical = RowSwipe(); vertical.move(x: 2, y: 9); vertical.move(x: 200, y: 0)
+        XCTAssertTrue(vertical.axis == .vertical)
+        var horizontal = RowSwipe(); horizontal.move(x: -10, y: 2); horizontal.move(x: -170, y: 100)
+        XCTAssertTrue(horizontal.axis == .horizontal)
+        XCTAssertEqual(RowSwipe.finish(offset: horizontal.x), .archive)
+        XCTAssertEqual(RowSwipe.finish(offset: -70), .archiveButton)
+        XCTAssertEqual(RowSwipe.finish(offset: 60), .shareButtons)
+        XCTAssertEqual(RowSwipe.finish(offset: 30), .closed)
+        XCTAssertEqual(RowSwipe.finish(offset: -200, cancelled: true), .closed)
+    }
     func testCaptureDeduplicatesWithinBatchAndAcrossSaves() {
         var library = Library()
         XCTAssertEqual(library.insert([
@@ -278,6 +320,10 @@ func XCTAssertThrowsError<T>(_ expression: @autoclosure () throws -> T) {
         await tests.testBillingPollFindsDelayedPaymentWithoutCallback()
         await tests.testBillingPollTimesOutWithoutGrantingAccess()
         await tests.testBillingPollStopsOnCancellation()
-        print("Passed 20 SaveNest checks")
+        tests.testArchiveUndoPreservesEditsAndExistingArchive()
+        tests.testEmptyArchiveDeletesOnlyConfirmedStillArchivedLinks()
+        tests.testEmailShareOnlyIncludesExplicitlyChosenNote()
+        tests.testSwipeLocksDirectionAndRequiresIntentionalDistance()
+        print("Passed 24 SaveNest checks")
     }
 }

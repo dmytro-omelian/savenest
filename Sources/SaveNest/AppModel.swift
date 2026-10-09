@@ -30,6 +30,16 @@ final class AppModel: ObservableObject {
     let tabSearch = TabSearchModel()
     var showTabSearch: (() -> Void)?
     @Published var selectedID: UUID?
+    @Published var sharingLink: SavedLink?
+    @Published var swipedLinkID: UUID?
+    @Published private(set) var archiveUndo: ArchiveUndo?
+    struct ArchiveUndo {
+        let ids: Set<UUID>
+        let archived: Bool
+        var message: String { "\(ids.count) " + (ids.count == 1 ? "link " : "links ") + (archived ? "archived" : "restored") }
+    }
+    var activeIDs: Set<UUID> { Set(library.links.filter { !$0.isArchived }.map(\.id)) }
+    var archivedIDs: Set<UUID> { Set(library.links.filter(\.isArchived).map(\.id)) }
     @Published var error: String?
     @Published var isCapturing = false
     @Published var showingAdd = false
@@ -105,7 +115,8 @@ final class AppModel: ObservableObject {
             if captureFeedback { notify(CaptureNotice(title: "Couldn’t save your tab", message: message, isError: true)) }
             else { error = message }
         }
-        guard !isPreview else { error = "This is a read-only design preview."; return false }
+        // The preview owns an in-memory fixture and never loads or writes the user's library.
+        if isPreview { library = next; return true }
         guard !loadFailed else { report("Your library couldn’t be opened. Restore a valid backup and restart SaveNest. Your original file is unchanged."); return false }
         do { try file.save(next); library = next; return true }
         catch { report("Couldn’t write to your library. \(error.localizedDescription)"); return false }
@@ -214,7 +225,33 @@ final class AppModel: ObservableObject {
         next.links[index] = link; return commit(next)
     }
     func favorite(_ link: SavedLink) { var next = link; next.isFavorite.toggle(); Task { await update(next) } }
-    @discardableResult func archive(_ link: SavedLink) -> Bool { var next = library; guard let index = next.links.firstIndex(where: { $0.id == link.id }) else { return false }; next.links[index].isArchived.toggle(); if commit(next) { selectedID = nil; return true }; return false }
+    @discardableResult func archive(_ link: SavedLink) -> Bool {
+        setArchived(!link.isArchived, ids: [link.id])
+    }
+    @discardableResult func setArchived(_ archived: Bool, ids: Set<UUID>) -> Bool {
+        var next = library
+        let changed = next.setArchived(archived, ids: ids)
+        guard !changed.isEmpty, commit(next) else { return false }
+        selectedID = nil; swipedLinkID = nil
+        archiveUndo = ArchiveUndo(ids: changed, archived: archived)
+        return true
+    }
+    func undoArchive() {
+        guard let undo = archiveUndo else { return }
+        var next = library
+        next.setArchived(!undo.archived, ids: undo.ids)
+        if commit(next) { archiveUndo = nil }
+    }
+    func dismissArchiveUndo() { archiveUndo = nil }
+    func emptyArchive(ids: Set<UUID>) {
+        var next = library
+        let removed = next.deleteArchived(ids: ids)
+        guard removed > 0, commit(next) else { return }
+        archiveUndo = nil; selectedID = nil; swipedLinkID = nil
+        notify(CaptureNotice(title: "Archive emptied", message: "\(removed) " + (removed == 1 ? "link permanently deleted." : "links permanently deleted.")))
+    }
+    func share(_ link: SavedLink) { swipedLinkID = nil; sharingLink = link }
+
     func delete(_ link: SavedLink) {
         var next = library; next.links.removeAll { $0.id == link.id }
         if commit(next) { selectedID = nil; notify("Link deleted") }

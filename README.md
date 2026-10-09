@@ -66,6 +66,10 @@ Press **⌘⇧O** from any app to open only the compact tab switcher, without ac
 
 - Links are grouped by local calendar date, newest first.
 - Click a title to open it in your default browser; click a note preview to edit it. Row actions become more prominent on hover.
+- Swipe left with two fingers to reveal Archive (Restore inside Archive); a long left swipe performs it. Swipe right for Email and Copy. Escape closes revealed actions. All actions are also in the row menu.
+- Email opens a preview with an editable subject and an optional note (off by default). Include a note starts from your saved note without changing it. Open Mail prepares a draft; you choose the recipient and send it.
+- “Archive all links…” in the library menu clears the active library after confirmation. Both individual and bulk archive/restore offer Undo in the footer for the last action.
+- “Empty archive…” lives inside Archive. It confirms the count before permanently deleting archived links, notes, and tags. Links outside Archive, restored links, and links added after the confirmation opened are kept.
 - Search titles, URLs, notes, and tags with **⌘F**. All keywords must match somewhere; results are ranked by relevance. Use **#tag** to match a single-word tag exactly.
 - Click a tag pill or use the Tags menu to filter. All, Favorites, Notes, and Archive keep the library in one compact view.
 - Add tags with Return or commas, reuse suggestions, and click a tag to remove it. Saving includes any unfinished tag input; **⌘Return** saves the editor.
@@ -94,7 +98,7 @@ node scripts/check-tab-close.mjs
 
 Twenty Swift checks cover library persistence, dates, browser selection, legacy migration, tags, keyword ranking, tag counts, annotation updates, title fallback, paid-access expiry, subscription payment recovery, delayed automatic access checks, polling timeout/cancellation, and forged, mismatched, or replayed native callbacks. Ten tab-close checks cover successful close, changed or closed windows/tabs, duplicate Safari URLs, and Chromium tab identity after reordering. Four additional Node checks execute the actual page reader against DOM fixtures, including unrelated posts and feed pages. The runner works with Command Line Tools alone; it does not require Xcode's XCTest framework.
 
-A read-only design fixture is available in debug builds with `.build/debug/SaveNest --ui-preview`. It does not load or write the saved library or register global shortcuts.
+An in-memory design fixture is available in debug builds with `.build/debug/SaveNest --ui-preview`. It does not load or write the saved library or register global shortcuts.
 
 ## Distribution
 

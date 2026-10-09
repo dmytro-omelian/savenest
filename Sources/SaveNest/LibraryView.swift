@@ -5,6 +5,13 @@ struct LibraryView: View {
     @ObservedObject var model: AppModel
     @FocusState private var searchFocused: Bool
     @State private var now = Date()
+    @State private var bulkAction: BulkAction?
+    private struct BulkAction: Identifiable {
+        let id = UUID()
+        let deleting: Bool
+        let ids: Set<UUID>
+        var count: String { "\(ids.count) " + (ids.count == 1 ? "link" : "links") }
+    }
     private let clock = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
     private var groups: [LinkDay] {
         guard !model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return LinkDay.group(model.visibleLinks, now: now) }
@@ -20,6 +27,14 @@ struct LibraryView: View {
             toolbar
             if !model.isPreview { AccountBanner(account: model.account, openAccount: { model.showAccount?() }) }
             filters
+            if model.filter == "Archive" && !model.archivedIDs.isEmpty {
+                HStack {
+                    Text("Kept here until you’re ready to let go.").foregroundStyle(Color.muted)
+                    Spacer()
+                    Button("Empty archive…") { bulkAction = BulkAction(deleting: true, ids: model.archivedIDs) }
+                        .buttonStyle(.plain).foregroundStyle(Color.muted).help("Permanently delete all archived links")
+                }.font(.system(size: 11)).padding(.horizontal, 38).padding(.top, 14)
+            }
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     if !model.query.isEmpty || model.selectedTag != nil || model.notesOnly {
@@ -38,7 +53,7 @@ struct LibraryView: View {
                                     Text(day.label.uppercased()).font(.system(size: 9, weight: .medium)).tracking(1).foregroundStyle(Color.muted.opacity(0.7)).padding(.leading, 4)
                                     VStack(spacing: 0) {
                                         ForEach(Array(day.links.enumerated()), id: \.element.id) { index, link in
-                                            LinkRow(link: link, model: model)
+                                            SwipeableLink(link: link, model: model) { LinkRow(link: link, model: model) }
                                             if index < day.links.count - 1 { Rectangle().fill(Color.line.opacity(0.65)).frame(height: 1).padding(.leading, 65) }
                                         }
                                     }
@@ -52,14 +67,30 @@ struct LibraryView: View {
         }
         .background(Color.paper).foregroundStyle(Color.ink).preferredColorScheme(.light)
         .frame(minWidth: 640, minHeight: 480)
+        .sheet(item: $model.sharingLink) { EmailShareView(link: $0) }
+        .alert(bulkAction.map { $0.deleting ? "Permanently delete \($0.count)?" : "Archive \($0.count)?" } ?? "", isPresented: Binding(get: { bulkAction != nil }, set: { if !$0 { bulkAction = nil } }), presenting: bulkAction) { action in
+            Button("Cancel", role: .cancel) { bulkAction = nil }
+            Button(action.deleting ? "Delete forever" : "Archive all", role: action.deleting ? .destructive : nil) {
+                if action.deleting { model.emptyArchive(ids: action.ids) }
+                else { model.setArchived(true, ids: action.ids) }
+                bulkAction = nil
+            }
+        } message: { action in
+            Text(action.deleting
+                 ? "These archived links, notes, and tags will be removed from this Mac. This cannot be undone. Links outside Archive are kept."
+                 : "All saved links will move to Archive, including links hidden by filters. Your notes and tags stay with them. You can undo this.")
+        }
         .sheet(isPresented: $model.showingAdd) { AddLinkView(model: model) }
         .sheet(item: Binding(get: { model.selected }, set: { model.selectedID = $0?.id })) { link in LinkDetailView(model: model, link: link) }
-        .alert("Couldn’t finish that", isPresented: Binding(get: { model.error != nil && !model.showingAdd && model.selectedID == nil }, set: { if !$0 { model.error = nil } })) {
+        .alert("Couldn’t finish that", isPresented: Binding(get: { model.error != nil && !model.showingAdd && model.selectedID == nil && model.sharingLink == nil && bulkAction == nil }, set: { if !$0 { model.error = nil } })) {
             Button("OK", role: .cancel) { model.error = nil }
             if model.error?.contains("Automation") == true {
                 Button("Automation Settings") { NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")!) }
             }
         } message: { Text(model.error ?? "") }
+        .onExitCommand { model.swipedLinkID = nil }
+        .onChange(of: model.selectedTag) { _, _ in model.swipedLinkID = nil }
+        .onChange(of: model.notesOnly) { _, _ in model.swipedLinkID = nil }
         .onReceive(clock) { now = $0 }
         .onReceive(NotificationCenter.default.publisher(for: .focusSearch)) { _ in searchFocused = true }
     }
@@ -101,6 +132,9 @@ struct LibraryView: View {
                 Menu {
                     Button("Account…") { model.showAccount?() }
                     Button("Settings…") { model.showSettings?() }
+                    Divider()
+                    Button("Archive all links…") { bulkAction = BulkAction(deleting: false, ids: model.activeIDs) }.disabled(model.activeIDs.isEmpty)
+                    Button("Export backup…") { model.exportLibrary() }
                 } label: { Image(systemName: "ellipsis").font(.system(size: 14)) }.menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().help("Library options")
             }
             HStack(spacing: 9) {
@@ -118,9 +152,9 @@ struct LibraryView: View {
             NestMark().frame(width: 52, height: 52).padding(22).background(Color.sage.opacity(0.055), in: RoundedRectangle(cornerRadius: 25)).padding(.bottom, 24)
             Text(model.query.isEmpty && model.selectedTag == nil && !model.notesOnly ? (model.filter == "Archive" ? "Nothing archived." : "A little room for good things.") : "No matching links.")
                 .font(.system(size: 23, weight: .regular, design: .serif)).padding(.bottom, 12)
-            Text(model.query.isEmpty && model.selectedTag == nil && !model.notesOnly ? "Open a browser tab and press" : "Try fewer words, another tag, or clear your filters.")
+            Text(model.query.isEmpty && model.selectedTag == nil && !model.notesOnly ? (model.filter == "Archive" ? "Swipe left on a saved link to move it here." : "Open a browser tab and press") : "Try fewer words, another tag, or clear your filters.")
                 .font(.system(size: 12)).foregroundStyle(Color.muted)
-            if model.query.isEmpty && model.selectedTag == nil && !model.notesOnly {
+            if model.query.isEmpty && model.selectedTag == nil && !model.notesOnly && model.filter != "Archive" {
                 Text(model.shortcut.label).font(.system(size: 17, weight: .medium, design: .monospaced))
                     .padding(.horizontal, 17).padding(.vertical, 10).background(Color.white, in: RoundedRectangle(cornerRadius: 8))
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.line)).padding(.top, 15)
@@ -130,7 +164,13 @@ struct LibraryView: View {
     }
     private var footer: some View {
         HStack(spacing: 7) {
-            if let notice = model.toast {
+            if let undo = model.archiveUndo {
+                Image(systemName: "archivebox").foregroundStyle(Color.sage)
+                Text(undo.message)
+                Button("Undo") { model.undoArchive() }.buttonStyle(.link)
+                Button { model.dismissArchiveUndo() } label: { Image(systemName: "xmark") }
+                    .buttonStyle(.plain).help("Dismiss undo").accessibilityLabel("Dismiss undo")
+            } else if let notice = model.toast {
                 Image(systemName: notice.isError ? "exclamationmark.circle" : "checkmark.circle.fill").foregroundStyle(notice.isError ? Color.orange : Color.sage)
                 Text(notice.title)
             } else if model.isCapturing {
@@ -190,6 +230,7 @@ struct LinkRow: View {
                 Menu {
                     Button("Open in browser") { model.open(link) }
                     Button("Copy link") { model.copy(link) }
+                    Button("Share by email…") { model.share(link) }
                     Button("Edit title, note & tags…") { model.selectedID = link.id }
                     Divider()
                     Button(link.isArchived ? "Restore to library" : "Archive") { model.archive(link) }
@@ -200,6 +241,7 @@ struct LinkRow: View {
             .contextMenu {
                 Button("Open in browser") { model.open(link) }
                 Button("Copy link") { model.copy(link) }
+                Button("Share by email…") { model.share(link) }
                 Button("Edit note & tags…") { model.selectedID = link.id }
                 Button(link.isArchived ? "Restore to library" : "Archive") { model.archive(link) }
             }
