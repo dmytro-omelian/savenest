@@ -34,11 +34,28 @@ struct QuietButton: ButtonStyle {
 }
 struct DomainIcon: View {
     let domain: String
+    var url: String? = nil
+    var iconURL: String? = nil
+    @State private var image: NSImage?
+    private var requestID: String { (url ?? domain) + "|" + (iconURL ?? "") }
     private var hue: Double { Double(domain.utf8.reduce(0) { ($0 + Int($1)) % 360 }) / 360 }
     var body: some View {
-        Text(String(domain.prefix(1)).uppercased()).font(.system(size: 20, weight: .medium, design: .serif))
-            .foregroundStyle(Color(hue: hue, saturation: 0.28, brightness: 0.50))
-            .frame(width: 42, height: 42).background(Color(hue: hue, saturation: 0.10, brightness: 0.94), in: RoundedRectangle(cornerRadius: 11))
-            .accessibilityHidden(true)
+        ZStack {
+            RoundedRectangle(cornerRadius: 11).fill(image == nil ? Color(hue: hue, saturation: 0.10, brightness: 0.94) : Color.white.opacity(0.75))
+            if let image {
+                Image(nsImage: image).resizable().interpolation(.high).scaledToFit().frame(width: 32, height: 32)
+                    .clipShape(RoundedRectangle(cornerRadius: 5))
+            } else {
+                Text(String(domain.prefix(1)).uppercased()).font(.system(size: 20, weight: .medium, design: .serif))
+                    .foregroundStyle(Color(hue: hue, saturation: 0.28, brightness: 0.50))
+            }
+        }.frame(width: 42, height: 42).accessibilityHidden(true)
+            .task(id: requestID) {
+                image = nil
+                guard let url else { return }
+                let data = await SiteIconLoader.shared.image(page: url, hint: iconURL)
+                guard !Task.isCancelled else { return }
+                image = data.flatMap(NSImage.init(data:))
+            }
     }
 }

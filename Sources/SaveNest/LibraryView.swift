@@ -199,7 +199,7 @@ struct LinkRow: View {
     private var hasNote: Bool { !link.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            DomainIcon(domain: link.domain).scaleEffect(0.62).frame(width: 26, height: 26)
+            DomainIcon(domain: link.domain, url: link.url, iconURL: link.iconURL).scaleEffect(0.62).frame(width: 26, height: 26)
             VStack(alignment: .leading, spacing: 8) {
                 Button { model.open(link) } label: {
                     VStack(alignment: .leading, spacing: 5) {

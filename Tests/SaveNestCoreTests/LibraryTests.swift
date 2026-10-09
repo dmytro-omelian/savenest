@@ -44,6 +44,37 @@ final class LibraryTests {
         XCTAssertEqual(RowSwipe.finish(offset: 30), .closed)
         XCTAssertEqual(RowSwipe.finish(offset: -200, cancelled: true), .closed)
     }
+    func testSiteIconURLsAndHTMLFallback() {
+        let base = SiteIcon.origin("https://www.example.com/private/path?secret=token#part")!
+        XCTAssertEqual(base.absoluteString, "https://www.example.com/")
+        let html = """
+        <link href="/style.css" rel="stylesheet">
+        <link href='/touch.png' rel='apple-touch-icon'>
+        <link REL="shortcut icon" HREF="/brand.png?v=1&amp;s=2">
+        <link rel=icon href=//cdn.example.com/favicon.ico>
+        <link rel=icon href="javascript:alert(1)">
+        <meta property="og:image" content="https://example.com/article.jpg">
+        """
+        XCTAssertEqual(SiteIcon.declared(in: html, base: base).map(\.absoluteString), ["https://www.example.com/brand.png?v=1&s=2", "https://cdn.example.com/favicon.ico", "https://www.example.com/touch.png"])
+        XCTAssertNil(SiteIcon.resolve("file:///tmp/icon.png", relativeTo: base))
+        XCTAssertNil(SiteIcon.resolve("https://user:secret@example.com/icon", relativeTo: base))
+        XCTAssertNil(SiteIcon.origin("javascript:alert(1)"))
+    }
+    func testIconMetadataSurvivesLibraryRoundTripAndLegacySaves() throws {
+        var link = SavedLink(url: "https://example.com/article", title: "Article")
+        link.iconURL = "https://cdn.example.com/icon.png"
+        let data = try JSONEncoder().encode(link)
+        try XCTAssertEqual(try JSONDecoder().decode(SavedLink.self, from: data).iconURL, link.iconURL)
+        var json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        json.removeValue(forKey: "iconURL")
+        let legacy = try JSONDecoder().decode(SavedLink.self, from: JSONSerialization.data(withJSONObject: json))
+        XCTAssertNil(legacy.iconURL)
+        var library = Library(); library.insert([link])
+        var updated = legacy; updated.note = "Keep my note"
+        library.saveAnnotated(updated)
+        XCTAssertEqual(library.links[0].iconURL, link.iconURL)
+        XCTAssertEqual(library.links[0].note, "Keep my note")
+    }
     func testCaptureDeduplicatesWithinBatchAndAcrossSaves() {
         var library = Library()
         XCTAssertEqual(library.insert([
@@ -324,6 +355,8 @@ func XCTAssertThrowsError<T>(_ expression: @autoclosure () throws -> T) {
         tests.testEmptyArchiveDeletesOnlyConfirmedStillArchivedLinks()
         tests.testEmailShareOnlyIncludesExplicitlyChosenNote()
         tests.testSwipeLocksDirectionAndRequiresIntentionalDistance()
-        print("Passed 24 SaveNest checks")
+        tests.testSiteIconURLsAndHTMLFallback()
+        try tests.testIconMetadataSurvivesLibraryRoundTripAndLegacySaves()
+        print("Passed 26 SaveNest checks")
     }
 }

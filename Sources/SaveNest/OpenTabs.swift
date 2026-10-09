@@ -171,7 +171,7 @@ struct TabSearchView: View {
                         ForEach(Array(model.results.enumerated()), id: \.element.id) { index, tab in
                             Button { model.activate(tab) } label: {
                                 HStack(spacing: 12) {
-                                    DomainIcon(domain: tab.domain).scaleEffect(0.67).frame(width: 28, height: 28)
+                                    DomainIcon(domain: tab.domain, url: tab.url).scaleEffect(0.67).frame(width: 28, height: 28)
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text(tab.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
                                         Text("\(tab.domain) · \(tab.browserName)").font(.system(size: 11)).foregroundStyle(Color.muted).lineLimit(1)

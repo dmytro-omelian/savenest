@@ -40,7 +40,7 @@ struct LinkDetailView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack(spacing: 12) {
-                DomainIcon(domain: link.domain)
+                DomainIcon(domain: link.domain, url: link.url, iconURL: link.iconURL)
                 VStack(alignment: .leading, spacing: 5) {
                     Text(link.domain).font(.system(size: 18, weight: .medium))
                     Text("Saved from \(link.browser) · \(link.createdAt.formatted(date: .abbreviated, time: .omitted))").font(.system(size: 11)).foregroundStyle(Color.muted)
@@ -105,7 +105,7 @@ struct TabSelectionView: View {
                                 HStack(spacing: 11) {
                                     Image(systemName: draft.selected.contains(link.id) ? "checkmark.square.fill" : "square")
                                         .foregroundStyle(draft.selected.contains(link.id) ? Color.sage : Color.muted)
-                                    DomainIcon(domain: link.domain)
+                                    DomainIcon(domain: link.domain, url: link.url, iconURL: link.iconURL)
                                     VStack(alignment: .leading, spacing: 3) {
                                         Text(link.title).font(.system(size: 12, weight: .medium)).lineLimit(1)
                                         Text(link.domain).font(.system(size: 10)).foregroundStyle(Color.muted).lineLimit(1)
@@ -163,6 +163,7 @@ struct SettingsView: View {
                 fieldLabel("BROWSERS & PRIVACY")
                 Text("Capture directly from Safari and supported Chromium browsers, including Chrome, Arc, Brave, and Edge. macOS asks for Automation permission the first time you capture from each browser.").font(.system(size: 12)).lineSpacing(4)
                 Text("For Firefox or another app, copy its URL and choose Add link → Paste URL. Tabs stay open unless you choose Save & close tab for quick capture. SaveNest only reads tabs when you ask and stores links and notes locally.").font(.system(size: 11)).foregroundStyle(Color.muted).lineSpacing(4)
+                Text("Website icons load directly from the site or its icon host and are cached on this Mac. SaveNest doesn’t use a third-party favicon service or send browser cookies.").font(.system(size: 11)).foregroundStyle(Color.muted).lineSpacing(4)
                 Text("Richer social titles use page metadata and post text when available. Your browser may require its ‘Allow JavaScript from Apple Events’ setting for this. Capture still works without it, using the tab title or a description based on the URL.").font(.system(size: 11)).foregroundStyle(Color.muted).lineSpacing(4)
                 Button("Open Automation Settings ↗") { NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")!) }.buttonStyle(.link).font(.system(size: 11))
             }

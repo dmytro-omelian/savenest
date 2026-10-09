@@ -8,6 +8,9 @@ enum PageMetadata {
       const meta = key => text(document.querySelector('meta[property="' + key + '"],meta[name="' + key + '"]')?.content);
       const data = {url: location.href, pageTitle: text(document.title), ogTitle: meta('og:title'),
         twitterTitle: meta('twitter:title'), description: meta('og:description') || meta('twitter:description') || meta('description')};
+      const icons = Array.from(document.querySelectorAll('link[rel]')).filter(link => /^(?:icon|shortcut icon|apple-touch-icon|apple-touch-icon-precomposed)$/i.test(link.rel.trim()));
+      const icon = icons.find(link => /(?:^|\s)icon(?:$|\s)/i.test(link.rel)) || icons[0];
+      if (icon && /^https?:\/\//i.test(icon.href)) data.iconURL = icon.href.slice(0, 4096);
       const host = location.hostname.replace(/^www\./, '');
       const path = location.pathname;
       if ((host === 'x.com' || host.endsWith('.x.com') || host === 'twitter.com') && /\/status\/\d+/.test(path)) {

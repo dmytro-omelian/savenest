@@ -65,6 +65,7 @@ Press **⌘⇧O** from any app to open only the compact tab switcher, without ac
 ## Library
 
 - Links are grouped by local calendar date, newest first.
+- Website icons replace letter tiles when available. New captures retain the page’s icon URL; older links use the site favicon or public homepage icon. Requests use no browser cookies or favicon proxy, run in the background (six at a time), and cache locally for seven days. Missing icons keep the letter fallback.
 - Click a title to open it in your default browser; click a note preview to edit it. Row actions become more prominent on hover.
 - Swipe left with two fingers to reveal Archive (Restore inside Archive); a long left swipe performs it. Swipe right for Email and Copy. Escape closes revealed actions. All actions are also in the row menu.
 - Email opens a preview with an editable subject and an optional note (off by default). Include a note starts from your saved note without changing it. Open Mail prepares a draft; you choose the recipient and send it.

@@ -189,7 +189,11 @@ final class BrowserCapture {
                 }
                 struct Tab: Decodable { let url: String; let title: String; let metadata: [String: String]?; let closeTarget: CapturedTabTarget? }
                 let tabs = try JSONDecoder().decode([Tab].self, from: data)
-                let links = tabs.filter { Library.validatedURL($0.url) != nil }.map { SavedLink(url: $0.url, title: LinkTitle.best(url: $0.url, browserTitle: $0.title, metadata: $0.metadata ?? [:]), browser: browser.name) }
+                let links = tabs.filter { Library.validatedURL($0.url) != nil }.map { tab in
+                    var link = SavedLink(url: tab.url, title: LinkTitle.best(url: tab.url, browserTitle: tab.title, metadata: tab.metadata ?? [:]), browser: browser.name)
+                    link.iconURL = SiteIcon.resolve(tab.metadata?["iconURL"], relativeTo: URL(string: tab.url)!)?.absoluteString
+                    return link
+                }
                 guard !links.isEmpty else { throw CaptureError.noTabs }
                 DispatchQueue.main.async { completion(.success(CapturedTabs(links: links, closeTarget: tabs.first?.closeTarget))) }
             } catch { DispatchQueue.main.async { completion(.failure(error)) } }

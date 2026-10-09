@@ -147,7 +147,9 @@ final class AppModel: ObservableObject {
                 if action == .note || action == .tags, var link = links.first {
                     if let existing = library.links.first(where: { Library.identity($0.url) == Library.identity(link.url) }) {
                         let improved = link.title
+                        let iconURL = link.iconURL
                         link = existing
+                        if let iconURL { link.iconURL = iconURL }
                         if LinkTitle.isGeneric(link.title) { link.title = improved }
                     }
                     beginDraft(link, action: action)
@@ -169,6 +171,7 @@ final class AppModel: ObservableObject {
     @discardableResult private func saveCaptured(_ links: [SavedLink]) -> Bool {
         var next = library
         for link in links {
+            if let iconURL = link.iconURL, let index = next.links.firstIndex(where: { Library.identity($0.url) == Library.identity(link.url) }) { next.links[index].iconURL = iconURL }
             if let index = next.links.firstIndex(where: { Library.identity($0.url) == Library.identity(link.url) }),
                LinkTitle.isGeneric(next.links[index].title), !LinkTitle.isGeneric(link.title) { next.links[index].title = link.title }
         }

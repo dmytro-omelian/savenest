@@ -4,6 +4,7 @@ public struct SavedLink: Identifiable, Codable, Equatable {
     public var id: UUID
     public var url: String
     public var title: String
+    public var iconURL: String? = nil
     public var browser: String
     public var createdAt: Date
     public var collection: String
@@ -17,10 +18,11 @@ public struct SavedLink: Identifiable, Codable, Equatable {
         createdAt = Date(); self.collection = collection; note = ""; tags = []
         isFavorite = false; isArchived = false
     }
-    private enum CodingKeys: String, CodingKey { case id, url, title, browser, createdAt, collection, note, tags, isFavorite, isArchived }
+    private enum CodingKeys: String, CodingKey { case id, url, title, iconURL, browser, createdAt, collection, note, tags, isFavorite, isArchived }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id); url = try c.decode(String.self, forKey: .url)
+        iconURL = try c.decodeIfPresent(String.self, forKey: .iconURL)
         title = try c.decode(String.self, forKey: .title); browser = try c.decode(String.self, forKey: .browser)
         createdAt = try c.decode(Date.self, forKey: .createdAt); collection = try c.decode(String.self, forKey: .collection)
         note = try c.decode(String.self, forKey: .note)
@@ -68,6 +70,7 @@ public struct Library: Codable, Equatable {
     @discardableResult public mutating func saveAnnotated(_ link: SavedLink) -> Bool {
         guard Self.validatedURL(link.url) != nil else { return false }
         if let index = links.firstIndex(where: { Self.identity($0.url) == Self.identity(link.url) }) {
+            if let iconURL = link.iconURL { links[index].iconURL = iconURL }
             links[index].title = link.title
             links[index].note = link.note
             links[index].tags = SavedLink.normalizedTags(link.tags)
