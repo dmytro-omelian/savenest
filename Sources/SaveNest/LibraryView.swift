@@ -116,14 +116,22 @@ struct LinkRow: View {
     let link: SavedLink
     @ObservedObject var model: AppModel
     @State private var hovered = false
+    private var notePreview: String { link.note.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ") }
+    private var hasNote: Bool { !notePreview.isEmpty }
     var body: some View {
         HStack(spacing: 13) {
             Button { model.open(link) } label: {
                 HStack(spacing: 13) {
                     DomainIcon(domain: link.domain).scaleEffect(0.8).frame(width: 34, height: 34)
-                    VStack(alignment: .leading, spacing: 5) {
+                    VStack(alignment: .leading, spacing: 4) {
                         Text(link.title).font(.system(size: 13, weight: .medium)).foregroundStyle(Color.ink).lineLimit(1)
                         Text(([link.domain] + link.tags.map { "#" + $0 }).joined(separator: "  ·  ")).font(.system(size: 11)).foregroundStyle(Color.muted).lineLimit(1)
+                        if hasNote {
+                            HStack(spacing: 5) {
+                                Image(systemName: "text.quote").font(.system(size: 9, weight: .medium))
+                                Text(notePreview).font(.system(size: 10.5)).lineLimit(1)
+                            }.foregroundStyle(Color.sage)
+                        }
                     }
                     Spacer(minLength: 8)
                     Text(link.createdAt.formatted(date: .omitted, time: .shortened)).font(.system(size: 10)).monospacedDigit().foregroundStyle(Color.muted.opacity(0.8))
@@ -133,18 +141,18 @@ struct LinkRow: View {
             Menu {
                 Button("Open in browser") { model.open(link) }
                 Button("Copy link") { model.copy(link) }
-                Button("Add a note…") { model.beginDraft(link, action: .note) }
+                Button(hasNote ? "Edit note…" : "Add a note…") { model.beginDraft(link, action: .note) }
                 Button("Add tags…") { model.beginDraft(link, action: .tags) }
                 Button("Edit title, note & tags…") { model.selectedID = link.id }
                 Divider()
                 Button(link.isArchived ? "Restore to library" : "Archive") { model.archive(link) }
             } label: { Image(systemName: "ellipsis").font(.system(size: 12)).foregroundStyle(Color.muted) }.menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 19).help("Link options")
-        }.padding(.horizontal, 16).padding(.vertical, 14)
+        }.padding(.horizontal, 16).padding(.vertical, hasNote ? 11 : 14)
             .background(hovered ? Color.sage.opacity(0.035) : .clear, in: RoundedRectangle(cornerRadius: 12))
             .onHover { hovered = $0 }
             .contextMenu {
                 Button("Copy link") { model.copy(link) }
-                Button("Add a note…") { model.beginDraft(link, action: .note) }
+                Button(hasNote ? "Edit note…" : "Add a note…") { model.beginDraft(link, action: .note) }
                 Button("Add tags…") { model.beginDraft(link, action: .tags) }
                 Button("Edit title, note & tags…") { model.selectedID = link.id }
                 Button(link.isArchived ? "Restore to library" : "Archive") { model.archive(link) }
