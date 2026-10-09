@@ -70,7 +70,16 @@ final class BrowserCapture {
         // Do not silently capture Chrome while the user is trying to save a Firefox/other browser tab.
         if let id = front?.bundleIdentifier, !supported.contains(id), id != Bundle.main.bundleIdentifier {
             // URL handlers also include ordinary apps (such as ChatGPT); they aren't all browsers.
-            let unsupportedBrowserPrefixes = ["org.mozilla.firefox", "app.zen-browser", "com.kagi.kagimacOS"]
+            let unsupportedBrowserPrefixes = [
+                "org.mozilla.firefox",
+                "app.zen-browser",
+                "com.kagi.kagimacOS",
+                // Codex's in-app browser is rendered inside the Codex process and does not
+                // expose Safari/Chromium tab scripting. Treat it as a browser here so a
+                // capture attempt explains what happened instead of falling back to a
+                // previously used browser.
+                "com.openai.codex"
+            ]
             if unsupportedBrowserPrefixes.contains(where: { id.hasPrefix($0) }) {
                 throw CaptureError.unsupported(front?.localizedName ?? "this browser")
             }

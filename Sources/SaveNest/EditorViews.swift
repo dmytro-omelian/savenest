@@ -72,6 +72,53 @@ struct LinkDetailView: View {
     }
 }
 
+struct TabSelectionView: View {
+    @ObservedObject var model: AppModel
+    let draftID: UUID
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            sheetHeading("Choose what stays.", subtitle: "Select the tabs you want to save. Nothing closes in your browser.")
+            if let draft = model.tabSelection, draft.id == draftID {
+                HStack {
+                    Button("Select all") { model.updateTabSelection(Set(draft.links.map(\.id))) }.buttonStyle(.link)
+                    Button("Select none") { model.updateTabSelection([]) }.buttonStyle(.link)
+                    Spacer()
+                    Text("\(draft.selected.count) selected").font(.system(size: 11)).foregroundStyle(Color.muted)
+                }
+                ScrollView {
+                    LazyVStack(spacing: 7) {
+                        ForEach(draft.links) { link in
+                            Button {
+                                var selected = draft.selected
+                                if selected.contains(link.id) { selected.remove(link.id) } else { selected.insert(link.id) }
+                                model.updateTabSelection(selected)
+                            } label: {
+                                HStack(spacing: 11) {
+                                    Image(systemName: draft.selected.contains(link.id) ? "checkmark.square.fill" : "square")
+                                        .foregroundStyle(draft.selected.contains(link.id) ? Color.sage : Color.muted)
+                                    DomainIcon(domain: link.domain)
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(link.title).font(.system(size: 12, weight: .medium)).lineLimit(1)
+                                        Text(link.domain).font(.system(size: 10)).foregroundStyle(Color.muted).lineLimit(1)
+                                    }
+                                    Spacer()
+                                }.padding(10).contentShape(Rectangle())
+                            }.buttonStyle(.plain)
+                        }
+                    }
+                }.frame(height: min(CGFloat(draft.links.count) * 58, 360))
+                    .background(Color.white.opacity(0.72), in: RoundedRectangle(cornerRadius: 10))
+                HStack {
+                    Spacer()
+                    Button("Cancel") { model.cancelTabSelection() }.keyboardShortcut(.cancelAction).buttonStyle(.plain)
+                    Button(draft.selected.count == 1 ? "Save tab" : "Save \(draft.selected.count) tabs") { model.saveTabSelection() }
+                        .buttonStyle(SageButton()).keyboardShortcut(.defaultAction).disabled(draft.selected.isEmpty)
+                }
+            }
+        }.padding(28).frame(width: 520).background(Color.paper).foregroundStyle(Color.ink)
+    }
+}
+
 struct SettingsView: View {
     @ObservedObject var model: AppModel
     var body: some View {
@@ -94,7 +141,7 @@ struct SettingsView: View {
                         if let error = model.shortcutErrors[action] { Text(error).font(.system(size: 10)).foregroundStyle(.red) }
                     }
                 }
-                Text("Click a shortcut and press a new combination with ⌘, ⌥, or ⌃. Escape cancels. Note and tag capture open a small editor; plain capture saves instantly.")
+                Text("Click a shortcut and press a new combination with ⌘, ⌥, or ⌃. Escape cancels. Selected tabs open a quick checklist; note and tag capture open a small editor.")
                     .font(.system(size: 11)).foregroundStyle(Color.muted).fixedSize(horizontal: false, vertical: true)
                 Button("Preview popup") { model.notify(CaptureError.noTabs.notice) }.buttonStyle(.link).font(.system(size: 11))
             }.padding(20).background(Color.white.opacity(0.75), in: RoundedRectangle(cornerRadius: 12))

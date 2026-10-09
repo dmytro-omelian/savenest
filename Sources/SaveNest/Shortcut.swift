@@ -3,10 +3,10 @@ import Carbon
 import SwiftUI
 
 enum CaptureAction: String, CaseIterable, Identifiable {
-    case quick, note, tags, window
+    case quick, note, tags, selected, window
     var id: String { rawValue }
     var title: String {
-        switch self { case .quick: return "Save link"; case .note: return "Save with a note"; case .tags: return "Save with tags"; case .window: return "Save all tabs in window" }
+        switch self { case .quick: return "Save link"; case .note: return "Save with a note"; case .tags: return "Save with tags"; case .selected: return "Save selected tabs"; case .window: return "Save all tabs in window" }
     }
     var defaultShortcut: CaptureShortcut {
         let modifiers: Int
@@ -14,6 +14,7 @@ enum CaptureAction: String, CaseIterable, Identifiable {
         case .quick: modifiers = cmdKey | shiftKey
         case .note: modifiers = cmdKey | optionKey
         case .tags: modifiers = cmdKey | controlKey
+        case .selected: modifiers = cmdKey | shiftKey | controlKey
         case .window: modifiers = cmdKey | shiftKey | optionKey
         }
         return CaptureShortcut(keyCode: 40, modifiers: UInt32(modifiers), character: "K")

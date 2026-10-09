@@ -19,8 +19,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var settingsWindow: NSWindow?
     private var accountWindow: NSWindow?
     private var captureEditor: NSPanel?
+    private var tabSelectionPanel: NSPanel?
     private var returnToApp: NSRunningApplication?
     private var editorDraftID: UUID?
+    private var tabSelectionDraftID: UUID?
     private var statusItem: NSStatusItem!
     private var toastPanel: NSPanel?
     private var toastDismiss: DispatchWorkItem?
@@ -35,6 +37,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         model.showSettings = { [weak self] in self?.openSettings() }
         model.showCaptureEditor = { [weak self] draft in self?.openCaptureEditor(draft) }
         model.closeCaptureEditor = { [weak self] in self?.closeCaptureEditor() }
+        model.showTabSelection = { [weak self] draft in self?.openTabSelection(draft) }
+        model.closeTabSelection = { [weak self] in self?.closeTabSelection() }
         model.showToast = { [weak self] message in self?.presentToast(message) }
         let root = LibraryView(model: model)
         libraryWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 740, height: 680), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
@@ -82,6 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     @objc private func captureTab() { model.capture(action: .quick) }
     @objc private func captureWindow() { model.capture(action: .window) }
+    @objc private func captureSelected() { model.capture(action: .selected) }
     @objc private func captureNote() { model.capture(action: .note) }
     @objc private func captureTags() { model.capture(action: .tags) }
     private func openCaptureEditor(_ draft: CaptureDraft) {
@@ -103,8 +108,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         captureEditor?.orderOut(nil); captureEditor = nil; editorDraftID = nil
         if NSApp.isActive { returnToApp?.activate(options: []) }; returnToApp = nil
     }
+    private func openTabSelection(_ draft: TabSelectionDraft) {
+        if tabSelectionDraftID == draft.id, let tabSelectionPanel { tabSelectionPanel.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); return }
+        let front = NSWorkspace.shared.frontmostApplication
+        returnToApp = front?.bundleIdentifier == Bundle.main.bundleIdentifier ? nil : front
+        let panel = NSPanel(contentRect: .zero, styleMask: [.titled, .closable, .utilityWindow], backing: .buffered, defer: false)
+        panel.title = "Save selected tabs"; panel.isReleasedWhenClosed = false; panel.delegate = self
+        panel.level = .floating; panel.hidesOnDeactivate = false; panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        let content = NSHostingView(rootView: TabSelectionView(model: model, draftID: draft.id))
+        panel.contentView = content; panel.setContentSize(content.fittingSize); panel.center()
+        tabSelectionPanel = panel; tabSelectionDraftID = draft.id
+        panel.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+    }
+    private func closeTabSelection() {
+        tabSelectionPanel?.orderOut(nil); tabSelectionPanel = nil; tabSelectionDraftID = nil
+        if NSApp.isActive { returnToApp?.activate(options: []) }; returnToApp = nil
+    }
     func windowWillClose(_ notification: Notification) {
-        if let window = notification.object as? NSWindow, window === captureEditor { model.cancelDraft() }
+        if let window = notification.object as? NSWindow {
+            if window === captureEditor { model.cancelDraft() }
+            if window === tabSelectionPanel { model.cancelTabSelection() }
+        }
     }
     @objc private func addLink() { openLibrary(); model.presentAdd() }
     @objc private func focusSearch() { openLibrary(); NotificationCenter.default.post(name: .focusSearch, object: nil) }
@@ -122,6 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         menu.addItem(item("Save current tab", #selector(captureTab)))
         menu.addItem(item("Save with a note…", #selector(captureNote)))
         menu.addItem(item("Save with tags…", #selector(captureTags)))
+        menu.addItem(item("Save selected tabs…", #selector(captureSelected)))
         menu.addItem(item("Save all tabs in this window", #selector(captureWindow)))
         menu.addItem(item("Add a link…", #selector(addLink)))
         menu.addItem(.separator()); menu.addItem(item("Account…", #selector(openAccount))); menu.addItem(item("Settings…", #selector(openSettings)))
@@ -136,7 +161,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let appRoot = NSMenuItem(); appRoot.submenu = app; main.addItem(appRoot)
         let file = NSMenu(title: "File")
         file.addItem(item("Add Link…", #selector(addLink), key: "n")); file.addItem(item("Open Library", #selector(openLibrary), key: "0"))
-        file.addItem(.separator()); file.addItem(item("Save Current Browser Tab", #selector(captureTab))); file.addItem(item("Save with a Note…", #selector(captureNote))); file.addItem(item("Save with Tags…", #selector(captureTags))); file.addItem(item("Save Browser Window", #selector(captureWindow)))
+        file.addItem(.separator()); file.addItem(item("Save Current Browser Tab", #selector(captureTab))); file.addItem(item("Save with a Note…", #selector(captureNote))); file.addItem(item("Save with Tags…", #selector(captureTags))); file.addItem(item("Save Selected Tabs…", #selector(captureSelected))); file.addItem(item("Save Browser Window", #selector(captureWindow)))
         file.addItem(.separator()); file.addItem(item("Import Backup…", #selector(importLibrary))); file.addItem(item("Export Backup…", #selector(exportLibrary)))
         file.addItem(.separator()); file.addItem(NSMenuItem(title: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w"))
         let fileRoot = NSMenuItem(title: "File", action: nil, keyEquivalent: ""); fileRoot.submenu = file; main.addItem(fileRoot)

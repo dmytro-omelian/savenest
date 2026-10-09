@@ -43,13 +43,14 @@ Use **SaveNest → Settings** (**⌘,**) to record each shortcut separately:
 | Save current link | ⌘⇧K |
 | Save with a note | ⌘⌥K |
 | Save with tags | ⌘⌃K |
+| Save selected tabs | ⌘⌃⇧K |
 | Save all tabs in the current window | ⌘⌥⇧K |
 
 Your previously configured quick-save shortcut is preserved. Choose a key with Command, Option, or Control. Escape cancels recording. Conflicts with another SaveNest action are rejected; an unavailable system shortcut leaves the previous binding unchanged. Each row has its own reset button.
 
 Note and tag capture read the browser link first, then open a small editor with the appropriate field focused. Both note and tags are available in either editor. **⌘Return** saves and **Escape** cancels. Nothing is saved until you confirm. Capturing an existing link opens its existing note and tags; saving updates that link without losing its original date or archive state. A second capture while editing brings the existing draft forward instead of discarding it.
 
-Bulk capture saves the web tabs in the current browser window. It does not extract hyperlinks from a page or close tabs. The menu bar and File menu expose all four capture actions as well.
+Selected-tab capture opens a checklist of the web tabs in the current browser window and saves only the checked tabs. Bulk capture saves every web tab in that window. Neither action extracts hyperlinks from a page or closes tabs. The menu bar and File menu expose all five capture actions as well.
 
 The foreground supported browser takes priority. From SaveNest or another non-browser app, capture uses the last active supported browser (remembered across restarts). On a cold start, visible browser windows or a single running browser provide a fallback. Known unsupported foreground browsers get a specific message rather than capturing a different browser.
 

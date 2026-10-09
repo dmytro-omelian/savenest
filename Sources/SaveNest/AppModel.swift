@@ -9,6 +9,13 @@ struct CaptureDraft: Identifiable {
     let action: CaptureAction
 }
 
+struct TabSelectionDraft: Identifiable {
+    let id = UUID()
+    let links: [SavedLink]
+    var selected: Set<UUID>
+    init(links: [SavedLink]) { self.links = links; selected = Set(links.map(\.id)) }
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     let account = AccountController()
@@ -22,6 +29,7 @@ final class AppModel: ObservableObject {
     @Published var shortcuts: [CaptureAction: CaptureShortcut]
     @Published var shortcutErrors: [CaptureAction: String] = [:]
     @Published var draft: CaptureDraft?
+    @Published var tabSelection: TabSelectionDraft?
     var shortcut: CaptureShortcut { shortcuts[.quick] ?? .standard }
     var shortcutError: String? { shortcutErrors.values.first }
     @Published var toast: CaptureNotice?
@@ -35,6 +43,8 @@ final class AppModel: ObservableObject {
     var showToast: ((CaptureNotice) -> Void)?
     var showCaptureEditor: ((CaptureDraft) -> Void)?
     var closeCaptureEditor: (() -> Void)?
+    var showTabSelection: ((TabSelectionDraft) -> Void)?
+    var closeTabSelection: (() -> Void)?
 
     init() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -81,12 +91,18 @@ final class AppModel: ObservableObject {
             defer { isCapturing = false }
             guard await authorizeSaving() else { return }
             let result: Result<[SavedLink], Error> = await withCheckedContinuation { continuation in
-                captureService.capture(allTabs: action == .window) { continuation.resume(returning: $0) }
+                captureService.capture(allTabs: action == .window || action == .selected) { continuation.resume(returning: $0) }
             }
             switch result {
             case .success(let links):
                 // A capture or permission dialog may have outlasted the account lease.
                 guard await authorizeSaving() else { return }
+                if action == .selected {
+                    let selection = TabSelectionDraft(links: links)
+                    tabSelection = selection
+                    showTabSelection?(selection)
+                    return
+                }
                 if action == .note || action == .tags, var link = links.first {
                     if let existing = library.links.first(where: { Library.identity($0.url) == Library.identity(link.url) }) {
                         let improved = link.title
@@ -96,22 +112,36 @@ final class AppModel: ObservableObject {
                     beginDraft(link, action: action)
                     return
                 }
-                var next = library
-                for link in links {
-                    if let index = next.links.firstIndex(where: { Library.identity($0.url) == Library.identity(link.url) }),
-                       LinkTitle.isGeneric(next.links[index].title), !LinkTitle.isGeneric(link.title) { next.links[index].title = link.title }
-                }
-                let added = next.insert(links)
-                guard commit(next, captureFeedback: true) else { return }
-                let title = added == 0 ? "Already saved" : (added == 1 ? "Tab saved" : "\(added) tabs saved")
-                let message = added == 0 ? "Already in your library. No duplicate added." : "Ready in your library whenever you need it."
-                notify(CaptureNotice(title: title, message: message))
+                saveCaptured(links)
             case .failure(let failure):
                 let notice = (failure as? CaptureError)?.notice ?? CaptureNotice(title: "Couldn’t capture this tab", message: "Try again with a web page open in your browser.", isError: true)
                 notify(notice)
             }
         }
     }
+    private func saveCaptured(_ links: [SavedLink]) {
+        var next = library
+        for link in links {
+            if let index = next.links.firstIndex(where: { Library.identity($0.url) == Library.identity(link.url) }),
+               LinkTitle.isGeneric(next.links[index].title), !LinkTitle.isGeneric(link.title) { next.links[index].title = link.title }
+        }
+        let added = next.insert(links)
+        guard commit(next, captureFeedback: true) else { return }
+        let title = added == 0 ? "Already saved" : (added == 1 ? "Tab saved" : "\(added) tabs saved")
+        let message = added == 0 ? "Already in your library. No duplicate added." : "Ready in your library whenever you need it."
+        notify(CaptureNotice(title: title, message: message))
+    }
+    func updateTabSelection(_ selection: Set<UUID>) {
+        guard var draft = tabSelection else { return }
+        draft.selected = selection; tabSelection = draft
+    }
+    func saveTabSelection() {
+        guard let draft = tabSelection else { return }
+        let links = draft.links.filter { draft.selected.contains($0.id) }
+        guard !links.isEmpty else { return }
+        tabSelection = nil; closeTabSelection?(); saveCaptured(links)
+    }
+    func cancelTabSelection() { tabSelection = nil; closeTabSelection?() }
     private func authorizeSaving() async -> Bool {
         guard await account.authorize() else {
             notify(CaptureNotice(title: account.hasLogin ? "Check your subscription" : "Sign in to save", message: account.message ?? "Open Account to start saving.", isError: true, opensAccount: true))
