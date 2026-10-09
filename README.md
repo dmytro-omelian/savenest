@@ -46,6 +46,8 @@ Use **SaveNest → Settings** (**⌘,**) to record each shortcut separately:
 | Save all tabs in the current window | ⌘⌥⇧K |
 | Search open tabs | ⌘⇧O |
 
+Choose **Save link** or **Save & close tab** from the menu beside the quick-save shortcut. Save-only is the default; your choice is remembered. Closing happens only after a successful library write (including a link already saved), and only for the originally captured browser tab. A navigated, missing, or ambiguous tab is left open with a saved-but-not-closed notice. Safari requires the original tab position and a unique URL; Chromium uses its tab ID. Note, tag, selected-tab, and whole-window capture keep tabs open.
+
 Your previously configured quick-save shortcut is preserved. Choose a key with Command, Option, or Control. Escape cancels recording. Conflicts with another SaveNest action are rejected; an unavailable system shortcut leaves the previous binding unchanged. Each row has its own reset button.
 
 Note and tag capture read the browser link first, then open a small editor with the appropriate field focused. Both note and tags are available in either editor. **⌘Return** saves and **Escape** cancels. Nothing is saved until you confirm. Capturing an existing link opens its existing note and tags; saving updates that link without losing its original date or archive state. A second capture while editing brings the existing draft forward instead of discarding it.
@@ -87,9 +89,10 @@ Browsers may block this unless **Allow JavaScript from Apple Events** is enabled
 ```sh
 swift run SaveNestChecks
 node scripts/check-metadata.mjs
+node scripts/check-tab-close.mjs
 ```
 
-Twenty Swift checks cover library persistence, dates, browser selection, legacy migration, tags, keyword ranking, tag counts, annotation updates, title fallback, paid-access expiry, subscription payment recovery, delayed automatic access checks, polling timeout/cancellation, and forged, mismatched, or replayed native callbacks. Four additional Node checks execute the actual page reader against DOM fixtures, including unrelated posts and feed pages. The runner works with Command Line Tools alone; it does not require Xcode's XCTest framework.
+Twenty Swift checks cover library persistence, dates, browser selection, legacy migration, tags, keyword ranking, tag counts, annotation updates, title fallback, paid-access expiry, subscription payment recovery, delayed automatic access checks, polling timeout/cancellation, and forged, mismatched, or replayed native callbacks. Ten tab-close checks cover successful close, changed or closed windows/tabs, duplicate Safari URLs, and Chromium tab identity after reordering. Four additional Node checks execute the actual page reader against DOM fixtures, including unrelated posts and feed pages. The runner works with Command Line Tools alone; it does not require Xcode's XCTest framework.
 
 A read-only design fixture is available in debug builds with `.build/debug/SaveNest --ui-preview`. It does not load or write the saved library or register global shortcuts.
 

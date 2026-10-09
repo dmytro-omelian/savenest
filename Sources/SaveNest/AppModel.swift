@@ -20,6 +20,9 @@ struct TabSelectionDraft: Identifiable {
 final class AppModel: ObservableObject {
     let account = AccountController()
     @Published private(set) var library = Library()
+    @Published var closeAfterQuickSave = UserDefaults.standard.bool(forKey: "closeAfterQuickSave") {
+        didSet { UserDefaults.standard.set(closeAfterQuickSave, forKey: "closeAfterQuickSave") }
+    }
     @Published var filter = "All links"
     @Published var query = ""
     @Published var selectedTag: String?
@@ -112,14 +115,16 @@ final class AppModel: ObservableObject {
         if let draft { showCaptureEditor?(draft); return }
         guard !isCapturing else { return }
         isCapturing = true
+        let shouldClose = action == .quick && closeAfterQuickSave
         Task { @MainActor in
             defer { isCapturing = false }
             guard await authorizeSaving() else { return }
-            let result: Result<[SavedLink], Error> = await withCheckedContinuation { continuation in
-                captureService.capture(allTabs: action == .window || action == .selected) { continuation.resume(returning: $0) }
+            let result: Result<CapturedTabs, Error> = await withCheckedContinuation { continuation in
+                captureService.capture(allTabs: action == .window || action == .selected, prepareClose: shouldClose) { continuation.resume(returning: $0) }
             }
             switch result {
-            case .success(let links):
+            case .success(let captured):
+                let links = captured.links
                 // A capture or permission dialog may have outlasted the account lease.
                 guard await authorizeSaving() else { return }
                 if action == .selected {
@@ -137,24 +142,31 @@ final class AppModel: ObservableObject {
                     beginDraft(link, action: action)
                     return
                 }
-                saveCaptured(links)
+                let saved = saveCaptured(links)
+                if saved && shouldClose {
+                    let closed: Bool
+                    if let target = captured.closeTarget { closed = await captureService.closeSavedTab(target) }
+                    else { closed = false }
+                    notify(CaptureNotice(title: closed ? "Saved & closed" : "Saved · tab left open", message: closed ? "Ready in your library whenever you need it." : "The tab changed or couldn’t be closed safely. Your link is saved."))
+                }
             case .failure(let failure):
                 let notice = (failure as? CaptureError)?.notice ?? CaptureNotice(title: "Couldn’t capture this tab", message: "Try again with a web page open in your browser.", isError: true)
                 notify(notice)
             }
         }
     }
-    private func saveCaptured(_ links: [SavedLink]) {
+    @discardableResult private func saveCaptured(_ links: [SavedLink]) -> Bool {
         var next = library
         for link in links {
             if let index = next.links.firstIndex(where: { Library.identity($0.url) == Library.identity(link.url) }),
                LinkTitle.isGeneric(next.links[index].title), !LinkTitle.isGeneric(link.title) { next.links[index].title = link.title }
         }
         let added = next.insert(links)
-        guard commit(next, captureFeedback: true) else { return }
+        guard commit(next, captureFeedback: true) else { return false }
         let title = added == 0 ? "Already saved" : (added == 1 ? "Tab saved" : "\(added) tabs saved")
         let message = added == 0 ? "Already in your library. No duplicate added." : "Ready in your library whenever you need it."
         notify(CaptureNotice(title: title, message: message))
+        return true
     }
     func updateTabSelection(_ selection: Set<UUID>) {
         guard var draft = tabSelection else { return }

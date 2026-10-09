@@ -47,6 +47,20 @@ enum CaptureError: LocalizedError {
     }
 }
 
+struct CapturedTabs {
+    let links: [SavedLink]
+    let closeTarget: CapturedTabTarget?
+}
+struct CapturedTabTarget: Codable {
+    let windowID: Int
+    let index: Int
+    let tabID: Int?
+    let url: String
+    let safari: Bool
+    var browserID: String = ""
+    var processID: Int32 = 0
+}
+
 final class BrowserCapture {
     private var observation: NSObjectProtocol?
     private var lastBrowserID: String?
@@ -105,10 +119,20 @@ final class BrowserCapture {
         UserDefaults.standard.set(browser.id, forKey: "lastCaptureBrowser")
         return browser
     }
-    func capture(allTabs: Bool, completion: @escaping (Result<[SavedLink], Error>) -> Void) {
+    func closeSavedTab(_ target: CapturedTabTarget) async -> Bool {
+        guard Browser.supported.contains(where: { $0.id == target.browserID }),
+              NSRunningApplication.runningApplications(withBundleIdentifier: target.browserID).contains(where: { $0.processIdentifier == target.processID }) else { return false }
+        do {
+            let payload = String(data: try JSONEncoder().encode(target), encoding: .utf8)!
+            let data = try await BrowserScript.run(TabCloseScript.script + "\nfunction run() { return String(closeCapturedTab(Application('" + target.browserID + "'), " + payload + ")); }")
+            return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) == "true"
+        } catch { return false }
+    }
+    func capture(allTabs: Bool, prepareClose: Bool = false, completion: @escaping (Result<CapturedTabs, Error>) -> Void) {
         let browser: Browser
         do { browser = try target() }
         catch { completion(.failure(error)); return }
+        let processID = NSRunningApplication.runningApplications(withBundleIdentifier: browser.id).first?.processIdentifier ?? 0
         // Browser IDs come only from the allowlist. No page content is evaluated as code.
         let tabExpression = allTabs ? "w.tabs()" : (browser.safari ? "[w.currentTab()]" : "[w.activeTab()]")
         let encodedReader = String(data: try! JSONEncoder().encode(PageMetadata.script), encoding: .utf8)!
@@ -122,6 +146,14 @@ final class BrowserCapture {
                 try {
                     const result = {url: tab.url() || '', title: tab.\(browser.safari ? "name" : "title")() || '', metadata: {}};
                     if (!/^https?:/i.test(result.url)) return result;
+                    if (\(prepareClose ? "true" : "false")) {
+                        try {
+                            const urls = \(browser.safari ? "w.tabs().map(t => t.url())" : "[]");
+                            if (!\(browser.safari ? "true" : "false") || urls.filter(u => u === result.url).length === 1) {
+                                result.closeTarget = {windowID:w.id(), index:urls.indexOf(result.url), tabID:\(browser.safari ? "null" : "tab.id()"), url:result.url, safari:\(browser.safari ? "true" : "false"), browserID:'\(browser.id)', processID:\(processID)};
+                            }
+                        } catch (_) { /* Save still works when stable tab identity is unavailable. */ }
+                    }
                     try {
                         const raw = \(browser.safari ? "app.doJavaScript(reader, {in: tab})" : "tab.execute({javascript: reader})");
                         const metadata = JSON.parse(raw);
@@ -155,11 +187,11 @@ final class BrowserCapture {
                     if errorText.contains("1743") || errorText.localizedCaseInsensitiveContains("not authorized") { throw CaptureError.permission(browser.name) }
                     throw CaptureError.failed("Check that the browser has an open window and try again.")
                 }
-                struct Tab: Decodable { let url: String; let title: String; let metadata: [String: String]? }
+                struct Tab: Decodable { let url: String; let title: String; let metadata: [String: String]?; let closeTarget: CapturedTabTarget? }
                 let tabs = try JSONDecoder().decode([Tab].self, from: data)
                 let links = tabs.filter { Library.validatedURL($0.url) != nil }.map { SavedLink(url: $0.url, title: LinkTitle.best(url: $0.url, browserTitle: $0.title, metadata: $0.metadata ?? [:]), browser: browser.name) }
                 guard !links.isEmpty else { throw CaptureError.noTabs }
-                DispatchQueue.main.async { completion(.success(links)) }
+                DispatchQueue.main.async { completion(.success(CapturedTabs(links: links, closeTarget: tabs.first?.closeTarget))) }
             } catch { DispatchQueue.main.async { completion(.failure(error)) } }
         }
     }

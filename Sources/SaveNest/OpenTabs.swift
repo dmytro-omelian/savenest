@@ -14,7 +14,7 @@ struct OpenBrowserTab: Identifiable, Decodable {
     var domain: String { URL(string: url)?.host?.replacingOccurrences(of: "www.", with: "") ?? url }
 }
 
-private enum BrowserScript {
+enum BrowserScript {
     static func run(_ script: String) async throws -> Data {
         try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {

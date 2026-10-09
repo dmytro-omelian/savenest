@@ -140,7 +140,7 @@ struct LibraryView: View {
                 Button { model.showSettings?() } label: {
                     HStack(spacing: 8) {
                         Text(model.shortcut.label).font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundStyle(Color.sage)
-                        Text("to save a tab")
+                        Text(model.closeAfterQuickSave ? "to save & close a tab" : "to save a tab")
                     }
                 }.buttonStyle(.plain).help("Change capture shortcut")
             }

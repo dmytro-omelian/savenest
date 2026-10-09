@@ -137,7 +137,12 @@ struct SettingsView: View {
                 ForEach(CaptureAction.allCases) { action in
                     VStack(alignment: .leading, spacing: 5) {
                         HStack {
-                            Text(action.title).font(.system(size: 12, weight: .medium))
+                            if action == .quick {
+                                Picker("Save link behavior", selection: $model.closeAfterQuickSave) {
+                                    Text("Save link").tag(false)
+                                    Text("Save & close tab").tag(true)
+                                }.labelsHidden().fixedSize().help("Choose what the Save link shortcut does")
+                            } else { Text(action.title).font(.system(size: 12, weight: .medium)) }
                             Spacer()
                             ShortcutRecorder(label: (model.shortcuts[action] ?? action.defaultShortcut).label,
                                 onStart: { model.hotkey.unregister() },
@@ -148,14 +153,14 @@ struct SettingsView: View {
                         if let error = model.shortcutErrors[action] { Text(error).font(.system(size: 10)).foregroundStyle(.red) }
                     }
                 }
-                Text("Click a shortcut and press a new combination with ⌘, ⌥, or ⌃. Escape cancels. Selected tabs open a quick checklist; note and tag capture open a small editor.")
+                Text("Save & close tab closes only after saving successfully. Other capture shortcuts leave tabs open.\n\nClick a shortcut and press a new combination with ⌘, ⌥, or ⌃. Escape cancels. Selected tabs open a quick checklist; note and tag capture open a small editor.")
                     .font(.system(size: 11)).foregroundStyle(Color.muted).fixedSize(horizontal: false, vertical: true)
                 Button("Preview popup") { model.notify(CaptureError.noTabs.notice) }.buttonStyle(.link).font(.system(size: 11))
             }.padding(20).background(Color.white.opacity(0.75), in: RoundedRectangle(cornerRadius: 12))
             VStack(alignment: .leading, spacing: 10) {
                 fieldLabel("BROWSERS & PRIVACY")
                 Text("Capture directly from Safari and supported Chromium browsers, including Chrome, Arc, Brave, and Edge. macOS asks for Automation permission the first time you capture from each browser.").font(.system(size: 12)).lineSpacing(4)
-                Text("For Firefox or another app, copy its URL and choose Add link → Paste URL. Tabs stay open. SaveNest only reads tabs when you ask and stores links and notes locally.").font(.system(size: 11)).foregroundStyle(Color.muted).lineSpacing(4)
+                Text("For Firefox or another app, copy its URL and choose Add link → Paste URL. Tabs stay open unless you choose Save & close tab for quick capture. SaveNest only reads tabs when you ask and stores links and notes locally.").font(.system(size: 11)).foregroundStyle(Color.muted).lineSpacing(4)
                 Text("Richer social titles use page metadata and post text when available. Your browser may require its ‘Allow JavaScript from Apple Events’ setting for this. Capture still works without it, using the tab title or a description based on the URL.").font(.system(size: 11)).foregroundStyle(Color.muted).lineSpacing(4)
                 Button("Open Automation Settings ↗") { NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")!) }.buttonStyle(.link).font(.system(size: 11))
             }
