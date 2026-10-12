@@ -12,13 +12,14 @@ public struct SavedLink: Identifiable, Codable, Equatable {
     public var tags: [String]
     public var isFavorite: Bool
     public var isArchived: Bool
+    public var importance: LinkImportance? = nil
 
     public init(url: String, title: String, browser: String = "Manual", collection: String = "Inbox") {
         id = UUID(); self.url = url; self.title = title; self.browser = browser
         createdAt = Date(); self.collection = collection; note = ""; tags = []
         isFavorite = false; isArchived = false
     }
-    private enum CodingKeys: String, CodingKey { case id, url, title, iconURL, browser, createdAt, collection, note, tags, isFavorite, isArchived }
+    private enum CodingKeys: String, CodingKey { case id, url, title, iconURL, browser, createdAt, collection, note, tags, isFavorite, isArchived, importance }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id); url = try c.decode(String.self, forKey: .url)
@@ -28,6 +29,7 @@ public struct SavedLink: Identifiable, Codable, Equatable {
         note = try c.decode(String.self, forKey: .note)
         tags = Self.normalizedTags(try c.decodeIfPresent([String].self, forKey: .tags) ?? [])
         isFavorite = try c.decode(Bool.self, forKey: .isFavorite); isArchived = try c.decode(Bool.self, forKey: .isArchived)
+        importance = try c.decodeIfPresent(LinkImportance.self, forKey: .importance)
     }
     public static func normalizedTags(_ values: [String]) -> [String] {
         var seen = Set<String>()

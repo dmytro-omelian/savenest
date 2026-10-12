@@ -11,6 +11,7 @@ struct AppRootView: View {
                 switch model.section {
                 case .library: LibraryView(model: model)
                 case .tags: TagsView(model: model)
+                case .review: ImportanceReviewView(model: model)
                 case .account: AccountView(account: model.account) { model.section = .library }
                 case .settings: SettingsView(model: model) { model.section = .library }
                 }
@@ -35,6 +36,7 @@ struct AppRootView: View {
             VStack(spacing: 5) {
                 railButton("Library", icon: "tray", selected: model.section == .library) { model.section = .library }
                 railButton("Tags", icon: "number", selected: model.section == .tags) { model.section = .tags }
+                railButton("Review importance", icon: "checklist", selected: model.section == .review) { model.section = .review }
                 Rectangle().fill(Color.line).frame(width: 24, height: 1).padding(.vertical, 5)
                 railButton("Search open tabs", icon: "rectangle.on.rectangle") { model.showTabSearch?() }
                 railButton("Add a link", icon: "plus") { model.section = .library; model.presentAdd() }
@@ -68,6 +70,7 @@ private extension AppModel {
         switch section {
         case .library: "library"
         case .tags: "tags"
+        case .review: "review"
         case .account: "account"
         case .settings: "settings"
         }

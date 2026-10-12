@@ -12,7 +12,7 @@ enum TabCloseScript {
     }
     function closeCapturedTab(app, target) {
         if (!app.running()) return false;
-        const windowIndex = app.windows.id().indexOf(target.windowID);
+        const windowIndex = app.windows.id().map(String).indexOf(String(target.windowID));
         if (windowIndex < 0) return false;
         const w = app.windows[windowIndex];
         let tab;
@@ -20,7 +20,7 @@ enum TabCloseScript {
             if (uniqueSafariTabIndex(w, target.url) !== target.index || target.index < 0) return false;
             tab = w.tabs[target.index];
         } else {
-            const index = w.tabs.id().indexOf(target.tabID);
+            const index = w.tabs.id().map(String).indexOf(String(target.tabID));
             if (index < 0) return false;
             tab = w.tabs[index];
         }
