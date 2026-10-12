@@ -163,15 +163,6 @@ struct LibraryView: View {
                     Text(model.isPreview ? "Sample library" : model.isCapturing ? "Saving…" : "On your Mac").font(.system(size: 10, weight: .medium)).foregroundStyle(Color.muted)
                 }
             }
-            HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(model.filter == "Archive" ? "Your archive" : "Your saved links").font(.system(size: 27, weight: .semibold)).tracking(-0.8)
-                    Text(model.filter == "Archive" ? "A little space for things you’re done with." : "Good finds, all in one place.").font(.system(size: 12)).foregroundStyle(Color.muted)
-                }
-                Spacer()
-                Button { model.presentAdd() } label: { Label("Add link", systemImage: "plus") }
-                    .buttonStyle(QuietButton()).help("Add a link (⌘N)")
-            }
             ZStack(alignment: .topLeading) {
                 HStack(spacing: 9) {
                     Image(systemName: "magnifyingglass").font(.system(size: 14)).foregroundStyle(model.isTagSearch ? Color.sage : Color.muted)
