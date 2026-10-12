@@ -40,7 +40,7 @@ public enum AccountAccess {
     public static func allowsSaving(_ account: SaveNestAccount?, verifiedAt: Date?, now: Date = Date()) -> Bool {
         guard let account, let verifiedAt, now >= verifiedAt,
               now.timeIntervalSince(verifiedAt) < maximumAge,
-              account.subscription.active, account.subscription.status == "active",
+              account.subscription.active, ["active", "trialing"].contains(account.subscription.status),
               ["sandbox", "live"].contains(account.subscription.mode),
               account.subscription.plan == "monthly",
               let periodEnd = account.subscription.renewsAt, periodEnd > now.timeIntervalSince1970 else { return false }

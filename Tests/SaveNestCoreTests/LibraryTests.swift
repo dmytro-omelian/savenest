@@ -238,12 +238,14 @@ final class LibraryTests {
             SaveNestAccount(user: user, subscription: .init(active: active, plan: plan, status: status, mode: mode, renewsAt: end))
         }
         XCTAssertTrue(AccountAccess.allowsSaving(account(), verifiedAt: now, now: now))
+        XCTAssertTrue(AccountAccess.allowsSaving(account(status: "trialing"), verifiedAt: now, now: now))
+        XCTAssertFalse(AccountAccess.allowsSaving(account(active: false, status: "trialing"), verifiedAt: now, now: now))
         XCTAssertFalse(AccountAccess.allowsSaving(account(mode: "live", plan: "annual"), verifiedAt: now.addingTimeInterval(-119), now: now))
         XCTAssertFalse(AccountAccess.allowsSaving(account(), verifiedAt: nil, now: now))
         XCTAssertFalse(AccountAccess.allowsSaving(account(), verifiedAt: now.addingTimeInterval(-120), now: now))
         XCTAssertFalse(AccountAccess.allowsSaving(account(), verifiedAt: now.addingTimeInterval(1), now: now))
         XCTAssertFalse(AccountAccess.allowsSaving(account(active: false), verifiedAt: now, now: now))
-        for status in ["canceled", "past_due", "unpaid", "trialing", "incomplete"] {
+        for status in ["canceled", "past_due", "unpaid", "incomplete"] {
             XCTAssertFalse(AccountAccess.allowsSaving(account(status: status), verifiedAt: now, now: now))
         }
         XCTAssertFalse(AccountAccess.allowsSaving(account(mode: "preview"), verifiedAt: now, now: now))
