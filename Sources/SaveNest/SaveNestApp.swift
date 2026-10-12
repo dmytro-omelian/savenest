@@ -28,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var pendingURLs: [URL] = []
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
+        NSApp.appearance = NSAppearance(named: .darkAqua)
         model = AppModel()
         model.showTabSearch = { [weak self] in self?.openTabSearch() }
         model.tabSearch.close = { [weak self] in self?.tabSearchPanel?.orderOut(nil) }
@@ -43,7 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         model.showToast = { [weak self] message in self?.presentToast(message) }
         let root = AppRootView(model: model)
         libraryWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 750, height: 680), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
-        libraryWindow.title = model.isPreview ? "SaveNest Preview — Sample library" : "SaveNest"; libraryWindow.titleVisibility = model.isPreview ? .visible : .hidden
+        libraryWindow.title = model.isPreview ? "SaveNest Preview — Sample library" : "SaveNest"; libraryWindow.titleVisibility = .hidden
         libraryWindow.titlebarAppearsTransparent = true; libraryWindow.isReleasedWhenClosed = false
         libraryWindow.backgroundColor = NSColor(Color.paper)
         libraryWindow.contentView = NSHostingView(rootView: root)

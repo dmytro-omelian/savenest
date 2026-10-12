@@ -26,7 +26,7 @@ struct AddLinkView: View {
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction).buttonStyle(.plain)
                 Button(saving ? "Saving…" : "Save link") { saving = true; Task { if await model.add(url: url, title: title, collection: collection, note: note, tags: tags + SavedLink.parseTags(tagInput)) { dismiss() }; saving = false } }.buttonStyle(SageButton()).keyboardShortcut(.return, modifiers: .command).disabled(saving || Library.validatedURL(url) == nil)
             }.padding(.top, 8)
-        }.textFieldStyle(.roundedBorder).padding(32).frame(width: 470).background(Color.paper).foregroundStyle(Color.ink)
+        }.textFieldStyle(.roundedBorder).padding(32).frame(width: 470).background(Color.paper).foregroundStyle(Color.ink).preferredColorScheme(.dark)
             .onAppear { focused = true; if model.library.collections.contains(model.filter) { collection = model.filter } }
     }
 }
@@ -46,7 +46,7 @@ struct LinkDetailView: View {
                     Text("Saved from \(link.browser) · \(link.createdAt.formatted(date: .abbreviated, time: .omitted))").font(.system(size: 11)).foregroundStyle(Color.muted)
                 }
                 Spacer()
-                Button { model.open(link) } label: { Image(systemName: "arrow.up.right") }.buttonStyle(QuietButton()).help("Open link")
+                Button { model.open(link) } label: { Image(systemName: "arrow.up.right") }.buttonStyle(NestIconButton()).help("Open link")
             }
             VStack(alignment: .leading, spacing: 8) { fieldLabel("TITLE"); TextField("Title", text: $link.title).textFieldStyle(.roundedBorder) }
             Text(link.url).font(.system(size: 11)).foregroundStyle(Color.muted).lineLimit(3).textSelection(.enabled)
@@ -72,7 +72,7 @@ struct LinkDetailView: View {
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction).buttonStyle(.plain)
                 Button(saving ? "Saving…" : "Save changes") { link.tags = SavedLink.normalizedTags(link.tags + SavedLink.parseTags(tagsText)); saving = true; Task { if await model.update(link) { dismiss() }; saving = false } }.buttonStyle(SageButton()).keyboardShortcut(.return, modifiers: .command).disabled(saving)
             }
-        }.padding(32).frame(width: 510).background(Color.paper).foregroundStyle(Color.ink)
+        }.padding(32).frame(width: 510).background(Color.paper).foregroundStyle(Color.ink).preferredColorScheme(.dark)
             .interactiveDismissDisabled()
             .alert("Delete this link?", isPresented: $confirmingDelete) {
                 Button("Cancel", role: .cancel) {}
@@ -116,7 +116,7 @@ struct TabSelectionView: View {
                         }
                     }
                 }.frame(height: min(CGFloat(draft.links.count) * 58, 360))
-                    .background(Color.white.opacity(0.72), in: RoundedRectangle(cornerRadius: 10))
+                    .nestSurface()
                 HStack {
                     Spacer()
                     Button("Cancel") { model.cancelTabSelection() }.keyboardShortcut(.cancelAction).buttonStyle(.plain)
@@ -124,7 +124,7 @@ struct TabSelectionView: View {
                         .buttonStyle(SageButton()).keyboardShortcut(.defaultAction).disabled(draft.selected.isEmpty)
                 }
             }
-        }.padding(28).frame(width: 520).background(Color.paper).foregroundStyle(Color.ink)
+        }.padding(28).frame(width: 520).background(Color.paper).foregroundStyle(Color.ink).preferredColorScheme(.dark)
     }
 }
 
@@ -166,7 +166,7 @@ struct SettingsView: View {
                 Text("Click a shortcut, then press your new combination. Escape cancels.")
                     .font(.system(size: 11)).foregroundStyle(Color.muted).fixedSize(horizontal: false, vertical: true)
                 Button("Preview popup") { model.notify(CaptureError.noTabs.notice) }.buttonStyle(.link).font(.system(size: 11))
-            }.padding(20).background(Color.white.opacity(0.75), in: RoundedRectangle(cornerRadius: 12))
+            }.padding(20).nestSurface()
             VStack(alignment: .leading, spacing: 10) {
                 fieldLabel("BROWSERS & PRIVACY")
                 Text("Capture directly from Safari and supported Chromium browsers, including Chrome, Arc, Brave, and Edge. macOS asks for Automation permission the first time you capture from each browser.").font(.system(size: 12)).lineSpacing(4)
@@ -189,13 +189,13 @@ struct SettingsView: View {
             HStack { NestMark().frame(width: 20, height: 20); Text("SaveNest " + (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "development")); Spacer(); Text("A small app for a clearer mind.") }.font(.system(size: 10)).foregroundStyle(Color.muted)
         }.padding(32) }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color.paper).foregroundStyle(Color.ink).preferredColorScheme(.light)
+        .background(Color.paper).foregroundStyle(Color.ink).preferredColorScheme(.dark)
     }
 }
 func fieldLabel(_ text: String) -> some View { Text(text).font(.system(size: 9, weight: .semibold)).tracking(1.3).foregroundStyle(Color.muted) }
 func sheetHeading(_ title: String, subtitle: String) -> some View {
     VStack(alignment: .leading, spacing: 9) {
-        Text(title).font(.system(size: 27, weight: .regular, design: .serif)).tracking(-0.6)
+        Text(title).font(.system(size: 25, weight: .semibold)).tracking(-0.6)
         Text(subtitle).font(.system(size: 12)).foregroundStyle(Color.muted)
     }
 }

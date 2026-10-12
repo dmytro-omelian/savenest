@@ -23,7 +23,7 @@ struct QuickCaptureView: View {
             VStack(alignment: .leading, spacing: 6) {
                 TextField("Link title", text: $link.title).textFieldStyle(.plain).font(.system(size: 14, weight: .medium))
                 Text(link.domain).font(.system(size: 11)).foregroundStyle(Color.muted)
-            }.padding(13).frame(maxWidth: .infinity, alignment: .leading).background(Color.white, in: RoundedRectangle(cornerRadius: 9))
+            }.padding(14).frame(maxWidth: .infinity, alignment: .leading).nestSurface()
             if draft.action == .tags { tagsField; noteField } else { noteField; tagsField }
             HStack {
                 Text("⌘↵ to save · Esc to cancel").font(.system(size: 10)).foregroundStyle(Color.muted)
@@ -35,7 +35,7 @@ struct QuickCaptureView: View {
                     Task { _ = await model.saveDraft(link); saving = false }
                 }.buttonStyle(SageButton()).keyboardShortcut(.return, modifiers: .command).disabled(saving)
             }
-        }.padding(24).frame(width: 460).background(Color.paper).foregroundStyle(Color.ink).preferredColorScheme(.light)
+        }.padding(24).frame(width: 460).background(Color.paper).foregroundStyle(Color.ink).preferredColorScheme(.dark)
             .onAppear { if draft.action == .note { focus = .note } }
     }
     private var noteField: some View {
@@ -43,7 +43,7 @@ struct QuickCaptureView: View {
             fieldLabel("NOTE")
             TextEditor(text: $link.note).focused($focus, equals: .note).font(.system(size: 13))
                 .scrollContentBackground(.hidden).padding(8).frame(height: draft.action == .note ? 100 : 65)
-                .background(Color.white, in: RoundedRectangle(cornerRadius: 7)).overlay(RoundedRectangle(cornerRadius: 7).stroke(Color.line))
+                .nestSurface(radius: 10)
         }
     }
     private var tagsField: some View {

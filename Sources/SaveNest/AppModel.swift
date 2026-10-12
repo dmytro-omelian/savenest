@@ -18,6 +18,16 @@ struct TabSelectionDraft: Identifiable {
 
 enum AppSection { case library, tags, account, settings }
 
+enum AppLaunch {
+    static var isPreview: Bool {
+        #if DEBUG
+        return Bundle.main.bundleIdentifier == "app.savenest.preview" || ProcessInfo.processInfo.arguments.contains("--ui-preview")
+        #else
+        return false
+        #endif
+    }
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     let account = AccountController()
@@ -68,11 +78,7 @@ final class AppModel: ObservableObject {
     var showTabSelection: ((TabSelectionDraft) -> Void)?
     var closeTabSelection: (() -> Void)?
 
-    #if DEBUG
-    var isPreview: Bool { ProcessInfo.processInfo.arguments.contains("--ui-preview") }
-    #else
-    let isPreview = false
-    #endif
+    var isPreview: Bool { AppLaunch.isPreview }
     init() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         file = LibraryFile(url: support.appendingPathComponent("SaveNest/library.json"))

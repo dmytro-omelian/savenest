@@ -35,7 +35,7 @@ struct TagEditor: View {
                 if !input.trimmingCharacters(in: .whitespaces).isEmpty {
                     Button("Add") { commitInput() }.buttonStyle(.plain).foregroundStyle(Color.sage)
                 }
-            }.font(.system(size: 12)).padding(11).background(Color.white, in: RoundedRectangle(cornerRadius: 8)).overlay(RoundedRectangle(cornerRadius: 8).stroke(focused ? Color.sage : Color.line))
+            }.font(.system(size: 12)).padding(12).background(Color.surface, in: RoundedRectangle(cornerRadius: 10)).overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(focused ? Color.sage.opacity(0.6) : Color.line))
             if !available.isEmpty {
                 TagFlowLayout(spacing: 7) {
                     ForEach(available, id: \.self) { suggestion in
@@ -77,6 +77,6 @@ struct NoteEditor: View {
         ZStack(alignment: .topLeading) {
             if text.isEmpty { Text("Why did this catch your eye?").font(.system(size: 13)).foregroundStyle(Color.muted.opacity(0.7)).padding(.horizontal, 13).padding(.top, 14).allowsHitTesting(false) }
             TextEditor(text: $text).font(.system(size: 13)).lineSpacing(4).scrollContentBackground(.hidden).padding(8)
-        }.frame(height: height).background(Color.white, in: RoundedRectangle(cornerRadius: 9)).overlay(RoundedRectangle(cornerRadius: 9).stroke(Color.line))
+        }.frame(height: height).nestSurface(radius: 12)
     }
 }

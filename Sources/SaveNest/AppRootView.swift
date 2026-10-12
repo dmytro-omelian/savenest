@@ -5,16 +5,57 @@ struct AppRootView: View {
     @ObservedObject var model: AppModel
 
     var body: some View {
-        Group {
-            switch model.section {
-            case .library: LibraryView(model: model)
-            case .tags: TagsView(model: model)
-            case .account: AccountView(account: model.account) { model.section = .library }
-            case .settings: SettingsView(model: model) { model.section = .library }
+        HStack(spacing: 0) {
+            Group {
+                switch model.section {
+                case .library: LibraryView(model: model)
+                case .tags: TagsView(model: model)
+                case .account: AccountView(account: model.account) { model.section = .library }
+                case .settings: SettingsView(model: model) { model.section = .library }
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            actionRail
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.paper)
+        .foregroundStyle(Color.ink)
+        .tint(Color.sage)
+        .preferredColorScheme(.dark)
         .animation(.easeInOut(duration: 0.16), value: model.sectionKey)
+    }
+
+    private var actionRail: some View {
+        VStack(spacing: 12) {
+            Spacer(minLength: 12)
+            VStack(spacing: 5) {
+                railButton("Library", icon: "tray", selected: model.section == .library) { model.section = .library }
+                railButton("Tags", icon: "number", selected: model.section == .tags) { model.section = .tags }
+                Rectangle().fill(Color.line).frame(width: 24, height: 1).padding(.vertical, 5)
+                railButton("Search open tabs", icon: "rectangle.on.rectangle") { model.showTabSearch?() }
+                railButton("Add a link", icon: "plus") { model.section = .library; model.presentAdd() }
+            }.padding(6).background(.ultraThinMaterial, in: Capsule())
+                .overlay(Capsule().strokeBorder(Color.line.opacity(0.8)))
+                .shadow(color: .black.opacity(0.22), radius: 12, y: 8)
+            VStack(spacing: 5) {
+                railButton("Account", icon: "person.crop.circle", selected: model.section == .account) { model.showAccount?() }
+                railButton("Settings", icon: "slider.horizontal.3", selected: model.section == .settings) { model.showSettings?() }
+            }.padding(6).background(.ultraThinMaterial, in: Capsule())
+                .overlay(Capsule().strokeBorder(Color.line.opacity(0.8)))
+            Spacer(minLength: 12)
+        }.frame(width: 68).padding(.trailing, 8)
+            .background(Color.sidebar.opacity(0.35))
+    }
+
+    private func railButton(_ title: String, icon: String, selected: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon).font(.system(size: 17, weight: .medium))
+                .foregroundStyle(selected ? Color.sage : Color.muted)
+                .frame(width: 38, height: 38)
+                .background(selected ? Color.sage.opacity(0.14) : .clear, in: Circle())
+                .contentShape(Circle())
+        }.buttonStyle(.plain).help(title).accessibilityLabel(title)
+            .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
@@ -48,7 +89,7 @@ struct TagsView: View {
             .padding(.horizontal, 34).padding(.top, 25).padding(.bottom, 18)
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("Keep your library easy to browse.").font(.system(size: 27, weight: .regular, design: .serif)).tracking(-0.6)
+                Text("Keep your library easy to browse.").font(.system(size: 25, weight: .semibold)).tracking(-0.6)
                 Text("Rename or remove tags everywhere they appear. Select a tag to see matching links.")
                     .font(.system(size: 12)).foregroundStyle(Color.muted)
             }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 34).padding(.bottom, 22)
@@ -56,7 +97,7 @@ struct TagsView: View {
             if model.allTagSummaries.isEmpty {
                 VStack(spacing: 10) {
                     Image(systemName: "number").font(.system(size: 20)).foregroundStyle(Color.sage)
-                    Text("No tags yet").font(.system(size: 18, design: .serif))
+                    Text("No tags yet").font(.system(size: 18, weight: .medium))
                     Text("Add tags while saving or editing a link.").font(.system(size: 11)).foregroundStyle(Color.muted)
                 }.frame(maxWidth: .infinity).padding(.top, 80)
             } else {
@@ -70,8 +111,8 @@ struct TagsView: View {
             }
             Spacer(minLength: 0)
         }
-        .background(Color.paper).foregroundStyle(Color.ink).preferredColorScheme(.light)
-        .frame(minWidth: 640, minHeight: 480)
+        .background(Color.paper).foregroundStyle(Color.ink)
+        .frame(minWidth: 560, minHeight: 480)
         .alert("Remove #\(deletingTag?.name ?? "")?", isPresented: Binding(get: { deletingTag != nil }, set: { if !$0 { deletingTag = nil } }), presenting: deletingTag) { tag in
             Button("Cancel", role: .cancel) { deletingTag = nil }
             Button("Remove tag", role: .destructive) { _ = model.deleteTag(tag.name); deletingTag = nil }
@@ -102,8 +143,7 @@ struct TagsView: View {
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 12)
-        .background(Color.white.opacity(0.72), in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.line.opacity(0.75)))
+        .nestSurface()
     }
 
     private func saveRename(_ tag: TagSummary) {

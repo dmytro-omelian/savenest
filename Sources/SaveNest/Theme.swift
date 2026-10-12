@@ -1,12 +1,42 @@
 import SwiftUI
 
 extension Color {
-    static let paper = Color(red: 0.980, green: 0.976, blue: 0.965)
-    static let sidebar = Color(red: 0.949, green: 0.949, blue: 0.925)
-    static let ink = Color(red: 0.16, green: 0.18, blue: 0.15)
-    static let sage = Color(red: 0.32, green: 0.39, blue: 0.26)
-    static let muted = Color(red: 0.46, green: 0.49, blue: 0.42)
-    static let line = Color(red: 0.88, green: 0.89, blue: 0.85)
+    static let paper = Color(red: 0.075, green: 0.079, blue: 0.083)
+    static let sidebar = Color(red: 0.095, green: 0.101, blue: 0.108)
+    static let surface = Color(red: 0.115, green: 0.122, blue: 0.130)
+    static let raised = Color(red: 0.145, green: 0.154, blue: 0.165)
+    static let ink = Color(red: 0.94, green: 0.95, blue: 0.95)
+    static let sage = Color(red: 0.23, green: 0.82, blue: 0.63)
+    static let muted = Color(red: 0.62, green: 0.65, blue: 0.68)
+    static let line = Color(red: 0.22, green: 0.24, blue: 0.26)
+}
+
+/// One shared surface treatment for editors, search fields, and inset cards.
+struct NestSurface: ViewModifier {
+    var radius: CGFloat = 14
+    var elevated = false
+    func body(content: Content) -> some View {
+        content
+            .background(elevated ? Color.raised : Color.surface, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(Color.line.opacity(0.7), lineWidth: 1))
+    }
+}
+
+extension View {
+    func nestSurface(radius: CGFloat = 14, elevated: Bool = false) -> some View {
+        modifier(NestSurface(radius: radius, elevated: elevated))
+    }
+}
+
+struct NestIconButton: ButtonStyle {
+    @Environment(\.isEnabled) private var enabled
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.font(.system(size: 15, weight: .medium))
+            .frame(width: 36, height: 36)
+            .foregroundStyle(Color.ink.opacity(enabled ? 1 : 0.35))
+            .background(configuration.isPressed ? Color.raised : Color.surface, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(Color.line.opacity(0.6)))
+    }
 }
 struct NestMark: View {
     var body: some View {
@@ -21,15 +51,18 @@ struct NestMark: View {
     }
 }
 struct SageButton: ButtonStyle {
+    @Environment(\.isEnabled) private var enabled
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label.font(.system(size: 12, weight: .medium)).padding(.horizontal, 15).padding(.vertical, 10)
-            .foregroundStyle(.white).background(Color.sage.opacity(configuration.isPressed ? 0.8 : 1), in: RoundedRectangle(cornerRadius: 8))
+        configuration.label.font(.system(size: 12, weight: .semibold)).padding(.horizontal, 15).padding(.vertical, 10)
+            .foregroundStyle(Color.paper).background(Color.sage.opacity(enabled ? (configuration.isPressed ? 0.75 : 1) : 0.35), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }
 struct QuietButton: ButtonStyle {
+    @Environment(\.isEnabled) private var enabled
     func makeBody(configuration: Configuration) -> some View {
         configuration.label.font(.system(size: 12, weight: .medium)).padding(.horizontal, 12).padding(.vertical, 9)
-            .foregroundStyle(Color.sage).background(Color.sage.opacity(configuration.isPressed ? 0.13 : 0.06), in: RoundedRectangle(cornerRadius: 8))
+            .foregroundStyle(Color.ink.opacity(enabled ? 1 : 0.35)).background(configuration.isPressed ? Color.raised : Color.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.line.opacity(0.75)))
     }
 }
 struct DomainIcon: View {
@@ -41,13 +74,13 @@ struct DomainIcon: View {
     private var hue: Double { Double(domain.utf8.reduce(0) { ($0 + Int($1)) % 360 }) / 360 }
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 11).fill(image == nil ? Color(hue: hue, saturation: 0.10, brightness: 0.94) : Color.white.opacity(0.75))
+            RoundedRectangle(cornerRadius: 12, style: .continuous).fill(image == nil ? Color(hue: hue, saturation: 0.18, brightness: 0.24) : Color.raised)
             if let image {
-                Image(nsImage: image).resizable().interpolation(.high).scaledToFit().frame(width: 32, height: 32)
+                Image(nsImage: image).resizable().interpolation(.high).scaledToFit().frame(width: 26, height: 26)
                     .clipShape(RoundedRectangle(cornerRadius: 5))
             } else {
-                Text(String(domain.prefix(1)).uppercased()).font(.system(size: 20, weight: .medium, design: .serif))
-                    .foregroundStyle(Color(hue: hue, saturation: 0.28, brightness: 0.50))
+                Text(String(domain.prefix(1)).uppercased()).font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(Color(hue: hue, saturation: 0.22, brightness: 0.84))
             }
         }.frame(width: 42, height: 42).accessibilityHidden(true)
             .task(id: requestID) {

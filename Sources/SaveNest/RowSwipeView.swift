@@ -68,7 +68,7 @@ struct SwipeableLink<Content: View>: View {
 
     var body: some View {
         // Background actions never participate in sizing: the original compact row owns its height.
-        content().background(Color.paper).offset(x: offset)
+        content().background(Color.surface).offset(x: offset)
         .background {
             HStack(spacing: 0) {
                 if offset > 0 {
