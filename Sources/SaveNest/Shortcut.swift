@@ -3,16 +3,17 @@ import Carbon
 import SwiftUI
 
 enum CaptureAction: String, CaseIterable, Identifiable {
-    case quick, note, tags, selected, window, search
+    case quick, note, tags, selected, window, search, duplicates
     var id: String { rawValue }
     var title: String {
-        switch self { case .quick: return "Save link"; case .note: return "Save with a note"; case .tags: return "Save with tags"; case .selected: return "Save selected tabs"; case .window: return "Save all tabs in window"; case .search: return "Search open tabs" }
+        switch self { case .quick: return "Save link"; case .note: return "Save with a note"; case .tags: return "Save with tags"; case .selected: return "Save selected tabs"; case .window: return "Save all tabs in window"; case .search: return "Search open tabs"; case .duplicates: return "Close duplicate tabs" }
     }
     var defaultShortcut: CaptureShortcut {
         if self == .search { return CaptureShortcut(keyCode: 31, modifiers: UInt32(cmdKey | shiftKey), character: "O") }
+        if self == .duplicates { return CaptureShortcut(keyCode: 2, modifiers: UInt32(cmdKey | shiftKey), character: "D") }
         let modifiers: Int
         switch self {
-        case .quick, .search: modifiers = cmdKey | shiftKey
+        case .quick, .search, .duplicates: modifiers = cmdKey | shiftKey
         case .note: modifiers = cmdKey | optionKey
         case .tags: modifiers = cmdKey | controlKey
         case .selected: modifiers = cmdKey | shiftKey | controlKey
@@ -25,7 +26,7 @@ enum CaptureAction: String, CaseIterable, Identifiable {
         switch self {
         case .quick: return .init(keyCode: 40, modifiers: UInt32(cmdKey | shiftKey), character: "K")
         case .note: return .init(keyCode: 45, modifiers: UInt32(cmdKey | shiftKey), character: "N")
-        case .tags: return .init(keyCode: 17, modifiers: UInt32(cmdKey | shiftKey), character: "T")
+        case .tags: return .init(keyCode: 17, modifiers: UInt32(cmdKey | optionKey), character: "T")
         default: return defaultShortcut
         }
     }
@@ -36,6 +37,7 @@ struct CaptureShortcut: Codable, Equatable {
     var modifiers: UInt32
     var character: String
     static let standard = CaptureShortcut(keyCode: 40, modifiers: UInt32(cmdKey | shiftKey), character: "K")
+    static let legacyTagsPreset = CaptureShortcut(keyCode: 17, modifiers: UInt32(cmdKey | shiftKey), character: "T")
     var label: String {
         (modifiers & UInt32(controlKey) != 0 ? "⌃" : "") +
         (modifiers & UInt32(optionKey) != 0 ? "⌥" : "") +

@@ -22,6 +22,36 @@ enum BrowserTabScript {
         });
         return result;
     }
+    function isKnownEmptyBrowserTab(url) {
+        const value = String(url || '').toLowerCase().replace(/\/$/, '');
+        return ['', 'about:blank', 'about:newtab', 'chrome://newtab', 'chrome://new-tab-page',
+            'edge://newtab', 'brave://newtab', 'vivaldi://newtab', 'opera://startpage',
+            'favorites:/', 'safari://favorites', 'arc://new-tab'].includes(value);
+    }
+    function readBrowserTabsForCleanup(app, browser) {
+        if (!app.running()) return [];
+        const result = [];
+        app.windows().forEach(function(w, windowOffset) {
+            const windowID = String(w.id());
+            let activeIndex = -1;
+            try { activeIndex = Number(browser.safari ? w.currentTab.index() : w.activeTabIndex()); } catch (_) {}
+            w.tabs().forEach(function(t, i) {
+                try {
+                    const url = t.url() || '';
+                    let title = url || 'Empty tab';
+                    try { title = (browser.safari ? t.name() : t.title()) || title; } catch (_) {}
+                    result.push({browserID:browser.id, browserName:browser.name,
+                        windowID:windowID, windowIndex:windowOffset + 1,
+                        tabID:browser.safari ? '' : String(t.id()), index:i + 1,
+                        title:title, url:url,
+                        isActive:activeIndex === i + 1, isEmpty:isKnownEmptyBrowserTab(url)});
+                } catch (error) {
+                    if (error.errorNumber !== -1728) throw error;
+                }
+            });
+        });
+        return result;
+    }
     function activateBrowserTab(app, target) {
         if (!app.running()) return false;
         const windows = app.windows();

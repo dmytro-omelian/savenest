@@ -2,6 +2,26 @@ import Foundation
 import SaveNestCore
 
 final class LibraryTests {
+    func testTabCleanupPlanningIsConservativeAndDomainScoped() {
+        func tab(_ browser: String = "Safari", _ window: String = "1", _ index: Int, _ url: String, active: Bool = false, empty: Bool = false) -> BrowserTabSnapshot {
+            BrowserTabSnapshot(browserID: browser, browserName: browser, windowID: window, windowIndex: Int(window) ?? 1, tabID: browser == "Safari" ? "" : "\(index)", index: index, title: url, url: url, isActive: active, isEmpty: empty)
+        }
+        let tabs = [
+            tab("Safari", "1", 1, "https://example.com/page"),
+            tab("Safari", "1", 2, "https://example.com/page", active: true),
+            tab("Safari", "1", 3, "https://example.com/page?view=other"),
+            tab("Chrome", "1", 1, "https://example.com/page"),
+            tab("Safari", "1", 4, "about:blank", empty: true),
+            tab("Safari", "1", 5, "https://news.example.com/story")
+        ]
+        let cleanup = TabCleanupPlanner.duplicateAndEmptyCandidates(tabs)
+        XCTAssertEqual(Set(cleanup.map(\.id)), Set([tabs[0].id, tabs[4].id]))
+        XCTAssertEqual(TabCleanupPlanner.domainCandidates(tabs, domains: ["example.com"]).count, 5)
+        XCTAssertEqual(TabCleanupPlanner.domainCandidates(tabs, domains: ["news.example.com"]).map(\.id), [tabs[5].id])
+        XCTAssertEqual(TabCleanupPlanner.normalizedDomain(" HTTPS://WWW.Example.com/path "), "example.com")
+        XCTAssertNil(TabCleanupPlanner.normalizedDomain("not a domain"))
+    }
+
     func testBrowserTabPayloadsDecodeAndSaveTogether() throws {
         // Safari numeric IDs are normalized by the reader; Chrome natively returns text IDs.
         let payload = Data(#"[{"browserID":"com.apple.Safari","browserName":"Safari","windowID":"42","tabID":"","index":1,"title":"Safari page","url":"https://example.com/safari"},{"browserID":"com.google.Chrome","browserName":"Chrome","windowID":"42","tabID":"1084952245","index":1,"title":"Chrome page","url":"https://example.com/chrome"}]"#.utf8)
@@ -442,6 +462,7 @@ func XCTAssertThrowsError<T>(_ expression: @autoclosure () throws -> T) {
 @main enum Checks {
     @MainActor static func main() async throws {
         let tests = LibraryTests()
+        tests.testTabCleanupPlanningIsConservativeAndDomainScoped()
         try tests.testBrowserTabPayloadsDecodeAndSaveTogether()
         tests.testCaptureDeduplicatesWithinBatchAndAcrossSaves()
         tests.testMeaningfulQueriesAndFragmentsArePreserved()
@@ -476,6 +497,6 @@ func XCTAssertThrowsError<T>(_ expression: @autoclosure () throws -> T) {
         tests.testImportanceLearningRequiresEvidenceAndHonorsCorrections()
         try tests.testImportanceMigrationAndBackup()
         try tests.testAnalyticsOptOutAndPayloadBoundary()
-        print("Passed 34 SaveNest checks")
+        print("Passed 35 SaveNest checks")
     }
 }

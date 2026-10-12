@@ -133,6 +133,7 @@ struct SettingsView: View {
     @AppStorage(AppAppearance.preferenceKey) private var appearance = AppAppearance.black.rawValue
     @State private var archiveIDs: Set<UUID>?
     @State private var confirmResetLearning = false
+    @State private var showingCleanupWebsites = false
     var onBack: () -> Void = {}
     var body: some View {
         ScrollView { VStack(alignment: .leading, spacing: 26) {
@@ -172,7 +173,7 @@ struct SettingsView: View {
             Button("Account & subscription…") { model.showAccount?() }.buttonStyle(QuietButton())
             VStack(alignment: .leading, spacing: 15) {
                 fieldLabel("KEYBOARD SHORTCUTS")
-                Button("Use memorable preset: ⇧⌘K / ⇧⌘N / ⇧⌘T") { model.applyMemorableShortcuts() }
+                Button("Use memorable preset: ⇧⌘K / ⇧⌘N / ⌥⌘T") { model.applyMemorableShortcuts() }
                     .buttonStyle(.link).font(.system(size: 11))
                 Text("Same starting keys: K saves, N adds a note, T adds tags. Replaces these three shortcuts only. Some browsers use these combinations too.").font(.system(size: 11)).foregroundStyle(Color.muted)
                 Button("Show the quick tour") { model.showOnboarding() }.buttonStyle(.link).font(.system(size: 11))
@@ -187,14 +188,9 @@ struct SettingsView: View {
                             Button { model.configureShortcut(action.defaultShortcut, for: action) } label: { Image(systemName: "arrow.counterclockwise") }
                                 .buttonStyle(.plain).foregroundStyle(Color.muted).help("Reset \(action.title) shortcut")
                         }
-                        if action == .quick {
-                            HStack(spacing: 8) {
-                                Toggle("Close tab after saving", isOn: $model.closeAfterQuickSave)
-                                    .labelsHidden().toggleStyle(.switch).controlSize(.mini).tint(Color.sage)
-                                Text("Close tab after saving").font(.system(size: 11)).foregroundStyle(Color.muted)
-                                Spacer()
-                            }.padding(.top, 2).padding(.bottom, 5)
-                                .help("Applies only to Save link. The tab closes after it has been saved successfully.")
+                        if action == .duplicates {
+                            Text("Also removes empty new tabs. Chromium browsers normally use ⇧⌘D for Bookmark all tabs, so you can change this shortcut here.")
+                                .font(.system(size: 10)).foregroundStyle(Color.muted).fixedSize(horizontal: false, vertical: true)
                         }
                         if let error = model.shortcutErrors[action] { Text(error).font(.system(size: 10)).foregroundStyle(.red) }
                     }
@@ -203,10 +199,35 @@ struct SettingsView: View {
                     .font(.system(size: 11)).foregroundStyle(Color.muted).fixedSize(horizontal: false, vertical: true)
                 Button("Preview popup") { model.notify(CaptureError.noTabs.notice) }.buttonStyle(.link).font(.system(size: 11))
             }.padding(20).nestSurface()
+            VStack(alignment: .leading, spacing: 12) {
+                fieldLabel("AFTER SAVING")
+                Toggle("Close source tab after a successful save", isOn: $model.closeAfterQuickSave)
+                Text("Applies to Save link, Save with a note, and Save with tags. SaveNest verifies that the tab has not changed before closing it. Saving selected tabs or an entire window never closes tabs.")
+                    .font(.system(size: 11)).foregroundStyle(Color.muted).fixedSize(horizontal: false, vertical: true)
+            }.padding(20).nestSurface()
+            VStack(alignment: .leading, spacing: 13) {
+                fieldLabel("TAB CLEANUP")
+                Toggle("Enable website cleanup", isOn: $model.tabCleanupEnabled)
+                HStack {
+                    Button(model.tabCleanupDomains.isEmpty ? "Choose websites…" : "\(model.tabCleanupEnabled ? "On" : "Off") · \(model.tabCleanupDomains.count) \(model.tabCleanupDomains.count == 1 ? "website" : "websites")…") {
+                        showingCleanupWebsites = true
+                        model.refreshCleanupOpenTabs()
+                    }.buttonStyle(QuietButton())
+                    if model.isCleaningTabs { ProgressView().controlSize(.small) }
+                    Spacer()
+                }
+                Picker("When cleanup runs", selection: $model.tabCleanupApproval) {
+                    ForEach(TabCleanupApproval.allCases) { option in Text(option.title).tag(option) }
+                }.pickerStyle(.segmented).disabled(!model.tabCleanupEnabled)
+                Text("Ask before closing is recommended. Cleanup only considers open tabs from websites you choose; it never acts in the background.")
+                    .font(.system(size: 11)).foregroundStyle(Color.muted).fixedSize(horizontal: false, vertical: true)
+                Button(model.tabCleanupApproval == .ask ? "Review & clean up tabs…" : "Clean up tabs now") { model.runTabCleanup() }
+                    .buttonStyle(SageButton()).disabled(!model.tabCleanupEnabled || model.tabCleanupDomains.isEmpty || model.isCleaningTabs)
+            }.padding(20).nestSurface()
             VStack(alignment: .leading, spacing: 10) {
                 fieldLabel("BROWSERS & PRIVACY")
                 Text("Capture directly from Safari and supported Chromium browsers, including Chrome, Arc, Brave, and Edge. macOS asks for Automation permission the first time you capture from each browser.").font(.system(size: 12)).lineSpacing(4)
-                Text("For Firefox or another app, use Save copied link from the menu bar, or enable clipboard offers above. Tabs stay open unless you turn on Close tab after saving for the Save link shortcut. SaveNest only reads tabs when you ask and stores links and notes locally.").font(.system(size: 11)).foregroundStyle(Color.muted).lineSpacing(4)
+                Text("For Firefox or another app, use Save copied link from the menu bar, or enable clipboard offers above. Single-tab saves can close their source tab after success; selected-tab and whole-window saves never do. Search and cleanup only read tabs when you ask.").font(.system(size: 11)).foregroundStyle(Color.muted).lineSpacing(4)
                 Text("Website icons load directly from the site or its icon host and are cached on this Mac. SaveNest doesn’t use a third-party favicon service or send browser cookies.").font(.system(size: 11)).foregroundStyle(Color.muted).lineSpacing(4)
                 Text("Richer social titles use page metadata and post text when available. Your browser may require its ‘Allow JavaScript from Apple Events’ setting for this. Capture still works without it, using the tab title or a description based on the URL.").font(.system(size: 11)).foregroundStyle(Color.muted).lineSpacing(4)
                 Button("Open Automation Settings ↗") { NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")!) }.buttonStyle(.link).font(.system(size: 11))
@@ -242,6 +263,7 @@ struct SettingsView: View {
         } message: { _ in
             Text("All saved links will move to Archive, including links hidden by filters. Your notes and tags stay with them. You can undo this.")
         }
+        .sheet(isPresented: $showingCleanupWebsites) { TabCleanupWebsitesView(model: model) }
     }
 
     private var appearancePicker: some View {
@@ -295,6 +317,89 @@ struct SettingsView: View {
             .accessibilityHidden(true)
     }
 }
+
+struct TabCleanupWebsitesView: View {
+    @ObservedObject var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var domain = ""
+    @State private var expanded: Set<String> = []
+
+    private var availableDomains: [String] {
+        let configured = Set(model.tabCleanupDomains)
+        return Array(Set(model.cleanupOpenTabs.compactMap { TabCleanupPlanner.normalizedDomain($0.domain) }))
+            .filter { !configured.contains($0) }
+            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            sheetHeading("Cleanup websites", subtitle: "Only tabs from websites in this list can be closed by website cleanup.")
+            HStack(spacing: 8) {
+                TextField("example.com", text: $domain).textFieldStyle(.roundedBorder).onSubmit(addDomain)
+                Button("Add") { addDomain() }.buttonStyle(SageButton()).disabled(domain.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            if let error = model.error { Text(error).font(.system(size: 11)).foregroundStyle(.red) }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    if model.tabCleanupDomains.isEmpty {
+                        Text("No websites selected yet.").font(.system(size: 12)).foregroundStyle(Color.muted).padding(.vertical, 14)
+                    }
+                    ForEach(model.tabCleanupDomains, id: \.self) { item in
+                        let matches = TabCleanupPlanner.domainCandidates(model.cleanupOpenTabs, domains: [item])
+                        DisclosureGroup(isExpanded: Binding(get: { expanded.contains(item) }, set: { value in
+                            if value { expanded.insert(item) } else { expanded.remove(item) }
+                        })) {
+                            if matches.isEmpty {
+                                Text("No matching tabs are open.").font(.system(size: 10)).foregroundStyle(Color.muted).padding(.top, 8)
+                            } else {
+                                VStack(alignment: .leading, spacing: 7) {
+                                    ForEach(matches) { tab in
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(tab.title).font(.system(size: 11, weight: .medium)).lineLimit(1)
+                                            Text(tab.url).font(.system(size: 9)).foregroundStyle(Color.muted).lineLimit(1)
+                                        }
+                                    }
+                                }.padding(.top, 8)
+                            }
+                        } label: {
+                            HStack {
+                                Text(item).font(.system(size: 12, weight: .medium))
+                                Text("\(matches.count) open").font(.system(size: 10)).foregroundStyle(Color.muted)
+                                Spacer()
+                                Button { model.removeCleanupDomain(item) } label: { Image(systemName: "trash") }
+                                    .buttonStyle(.plain).foregroundStyle(Color.muted).help("Remove \(item)")
+                            }
+                        }.padding(12).nestSurface(radius: 11)
+                    }
+                    if !availableDomains.isEmpty {
+                        fieldLabel("ADD FROM OPEN TABS").padding(.top, 10)
+                        ForEach(availableDomains, id: \.self) { item in
+                            Button { _ = model.addCleanupDomain(item) } label: {
+                                HStack {
+                                    Text(item).font(.system(size: 11, weight: .medium))
+                                    Spacer()
+                                    Image(systemName: "plus.circle").foregroundStyle(Color.sage)
+                                }.padding(.horizontal, 12).padding(.vertical, 9).contentShape(Rectangle())
+                            }.buttonStyle(.plain).nestSurface(radius: 10)
+                        }
+                    }
+                }
+            }.frame(height: 330)
+            HStack {
+                Button { model.refreshCleanupOpenTabs() } label: { Label("Refresh open tabs", systemImage: "arrow.clockwise") }
+                    .buttonStyle(.link).disabled(model.isCleaningTabs)
+                if model.isCleaningTabs { ProgressView().controlSize(.small) }
+                Spacer()
+                Button("Done") { dismiss() }.buttonStyle(SageButton()).keyboardShortcut(.defaultAction)
+            }
+        }.padding(28).frame(width: 560).background(Color.paper).foregroundStyle(Color.ink).nestAppearance()
+    }
+
+    private func addDomain() {
+        if model.addCleanupDomain(domain) { domain = "" }
+    }
+}
+
 func fieldLabel(_ text: String) -> some View { Text(text).font(.system(size: 9, weight: .semibold)).tracking(1.3).foregroundStyle(Color.muted) }
 func sheetHeading(_ title: String, subtitle: String) -> some View {
     VStack(alignment: .leading, spacing: 9) {

@@ -28,6 +28,9 @@ struct AppRootView: View {
             NSApp.appearance = (AppAppearance(rawValue: value) ?? .black).nativeAppearance
         }
         .animation(.easeInOut(duration: 0.16), value: model.sectionKey)
+        .sheet(item: $model.cleanupReview) { draft in
+            TabCleanupReviewView(model: model, draftID: draft.id)
+        }
     }
 
     private var actionRail: some View {
