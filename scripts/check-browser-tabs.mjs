@@ -3,7 +3,7 @@ import { runInNewContext } from 'node:vm';
 import assert from 'node:assert/strict';
 const source = readFileSync(new URL('../Sources/SaveNest/BrowserTabScript.swift', import.meta.url), 'utf8');
 const script = source.split('#"""')[1].split('"""#')[0];
-const { readBrowserTabs, activateBrowserTab } = runInNewContext(script + '\n({readBrowserTabs, activateBrowserTab})');
+const { readBrowserTabs, readBrowserTabsForCleanup, isKnownEmptyBrowserTab, activateBrowserTab } = runInNewContext(script + '\n({readBrowserTabs, readBrowserTabsForCleanup, isKnownEmptyBrowserTab, activateBrowserTab})');
 let checks = 0;
 function fixture(safari, stringIDs) {
   const id = value => stringIDs ? String(value) : value;
@@ -24,6 +24,10 @@ for (const [safari, stringIDs] of [[true, false], [false, true], [false, false]]
   assert.equal(rows[0].windowID, '42');
   assert.equal(rows[0].tabID, safari ? '' : '1');
   assert.equal(rows[0].title, safari ? 'Safari 0' : 'Chrome 0');
+  const cleanupRows = readBrowserTabsForCleanup(f.app, f.browser);
+  assert.equal(cleanupRows.length, 13);
+  assert.equal(cleanupRows[0].windowIndex, 1);
+  assert.equal(cleanupRows[12].url, 'chrome://settings');
   const target = {...rows[10], safari};
   assert.equal(activateBrowserTab(f.app, target), true);
   assert.equal(f.app.activated, true);
@@ -38,6 +42,10 @@ for (const [safari, stringIDs] of [[true, false], [false, true], [false, false]]
   combined.push(...rows);
   checks++;
 }
+for (const url of ['', 'about:blank', 'chrome://newtab/', 'edge://newtab/', 'favorites://']) assert.equal(isKnownEmptyBrowserTab(url), true);
+assert.equal(isKnownEmptyBrowserTab('chrome://settings'), false);
+assert.equal(isKnownEmptyBrowserTab('https://example.com'), false);
+checks++;
 assert.equal(new Set(combined.map(t => t.browserID)).size, 2);
 checks++;
 const f = fixture(false, true);

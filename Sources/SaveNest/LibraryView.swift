@@ -37,7 +37,7 @@ struct LibraryView: View {
                 }.padding(14).background(Color.sage.opacity(0.08)).padding(.horizontal, 26).padding(.top, 10)
             }
             filters
-            if model.filter == "Archive" && !model.archivedIDs.isEmpty {
+            if model.filter == "Archive" && (model.query.isEmpty || !model.searchEverywhere) && !model.archivedIDs.isEmpty {
                 HStack {
                     Text("Kept here until you’re ready to let go.").foregroundStyle(Color.muted)
                     Spacer()
@@ -47,16 +47,13 @@ struct LibraryView: View {
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    if !model.query.isEmpty || model.selectedTag != nil || model.notesOnly {
-                        HStack {
-                            if let tag = model.selectedTag {
-                                Label("#\(tag)", systemImage: "number")
-                                    .font(.system(size: 12, weight: .medium)).foregroundStyle(Color.sage)
-                                    .padding(.horizontal, 9).padding(.vertical, 5)
-                                    .background(Color.sage.opacity(0.10), in: Capsule())
-                            } else {
-                                Text(model.query.isEmpty ? "Filtered library" : "Results for “\(model.query)”").font(.system(size: 12)).foregroundStyle(Color.muted).lineLimit(1)
-                            }
+                    if !model.query.isEmpty || model.hasRefinements {
+                        HStack(spacing: 8) {
+                            Text(model.query.isEmpty ? "Filtered library" : "\(model.searchScopeTitle) · “\(model.query)”")
+                                .font(.system(size: 12)).foregroundStyle(Color.muted).lineLimit(1)
+                            if let tag = model.selectedTag { resultChip("#\(tag)", icon: "number") }
+                            if let domain = model.selectedDomain { resultChip(domain, icon: "globe") }
+                            if model.notesOnly { resultChip("Has note", icon: "text.quote") }
                             Spacer()
                             Button("Clear filters") { model.clearFilters() }.buttonStyle(.link).font(.system(size: 11))
                         }
@@ -112,13 +109,23 @@ struct LibraryView: View {
         } message: { Text(model.error ?? "") }
         .onExitCommand { model.swipedLinkID = nil }
         .onChange(of: model.selectedTag) { _, _ in model.swipedLinkID = nil }
+        .onChange(of: model.selectedDomain) { _, _ in model.swipedLinkID = nil }
         .onChange(of: model.notesOnly) { _, _ in model.swipedLinkID = nil }
+        .onChange(of: model.query) { oldValue, newValue in
+            if oldValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                model.searchEverywhere = true
+            }
+        }
         .onReceive(clock) { now = $0 }
         .onReceive(NotificationCenter.default.publisher(for: .focusSearch)) { _ in searchFocused = true }
     }
     private var filters: some View {
         HStack(spacing: 4) {
-            scope("All links", filter: "All links")
+            if !model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Button { model.searchEverywhere = true } label: { filterLabel("Everywhere", selected: model.searchEverywhere) }
+                    .buttonStyle(.plain).help("Search active and archived links")
+            }
+            scope("Library", filter: "All links")
             scope("Favorites", filter: "Favorites")
             Button { model.notesOnly.toggle() } label: {
                 filterLabel("Notes", selected: model.notesOnly)
@@ -126,14 +133,28 @@ struct LibraryView: View {
             scope("Archive", filter: "Archive")
             Spacer()
             Menu {
-                Button("All tags") { model.selectedTag = nil }
-                Divider()
-                ForEach(model.tagSummaries) { tag in
-                    Button("\(tag.name)  ·  \(tag.count)") { model.selectedTag = tag.name }
+                Menu("Tags") {
+                    Button("All tags") { model.selectedTag = nil }
+                    Divider()
+                    ForEach(model.tagSummaries) { tag in
+                        Button("\(tag.name)  ·  \(tag.count)") { model.selectedTag = tag.name }
+                    }
+                }
+                Menu("Websites") {
+                    Button("All websites") { model.selectedDomain = nil }
+                    Divider()
+                    ForEach(model.domainOptions, id: \.self) { domain in
+                        Button(domain) { model.selectedDomain = domain }
+                    }
+                }
+                Toggle("Has a note", isOn: $model.notesOnly)
+                if model.hasRefinements {
+                    Divider()
+                    Button("Clear refinements") { model.selectedTag = nil; model.selectedDomain = nil; model.notesOnly = false }
                 }
             } label: { Image(systemName: "line.3.horizontal.decrease") }
                 .menuStyle(.borderlessButton).fixedSize().font(.system(size: 11)).foregroundStyle(Color.muted)
-                .help("Filter by tag").accessibilityLabel("Filter by tag")
+                .help("Filter results").accessibilityLabel("Filter results")
         }.padding(.horizontal, 26).padding(.top, 18).padding(.bottom, 2)
     }
     private var onboardingBanner: some View {
@@ -152,9 +173,17 @@ struct LibraryView: View {
         .padding(.horizontal, 26).padding(.top, 15)
     }
     private func scope(_ title: String, filter: String) -> some View {
-        Button { model.filter = filter; model.notesOnly = false; model.selectedTag = nil } label: {
-            filterLabel(title, selected: model.filter == filter && !model.notesOnly)
+        Button {
+            model.filter = filter
+            if !model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { model.searchEverywhere = false }
+            model.notesOnly = false; model.selectedTag = nil; model.selectedDomain = nil
+        } label: {
+            filterLabel(title, selected: model.filter == filter && !model.notesOnly && (model.query.isEmpty || !model.searchEverywhere))
         }.buttonStyle(.plain)
+    }
+    private func resultChip(_ title: String, icon: String) -> some View {
+        Label(title, systemImage: icon).font(.system(size: 10, weight: .medium)).foregroundStyle(Color.sage)
+            .padding(.horizontal, 8).padding(.vertical, 4).background(Color.sage.opacity(0.10), in: Capsule())
     }
     private func filterLabel(_ title: String, selected: Bool) -> some View {
         Text(title).font(.system(size: 11, weight: selected ? .semibold : .medium))
@@ -176,9 +205,22 @@ struct LibraryView: View {
             ZStack(alignment: .topLeading) {
                 HStack(spacing: 9) {
                     Image(systemName: "magnifyingglass").font(.system(size: 14)).foregroundStyle(model.isTagSearch ? Color.sage : Color.muted)
-                    TextField("Search your library", text: $model.query).textFieldStyle(.plain).font(.system(size: 14)).foregroundStyle(model.isTagSearch ? Color.sage : Color.ink).focused($searchFocused)
-                        .help("Search titles, websites, notes, and tags. Type # to find a tag.")
+                    TextField("Search every link", text: $model.query).textFieldStyle(.plain).font(.system(size: 14)).foregroundStyle(model.isTagSearch ? Color.sage : Color.ink).focused($searchFocused)
+                        .help("Search titles, full web addresses, notes, tags, and archived links. Type # to find a tag.")
                     if !model.query.isEmpty {
+                        Menu {
+                            Button { model.searchEverywhere = true } label: {
+                                if model.searchEverywhere { Label("Everywhere", systemImage: "checkmark") } else { Text("Everywhere") }
+                            }
+                            Button {
+                                model.searchEverywhere = false
+                            } label: {
+                                if !model.searchEverywhere { Label(model.filter == "All links" ? "Library" : model.filter, systemImage: "checkmark") }
+                                else { Text(model.filter == "All links" ? "Library" : model.filter) }
+                            }
+                        } label: {
+                            Text(model.searchScopeTitle).font(.system(size: 10, weight: .medium)).foregroundStyle(Color.sage)
+                        }.menuStyle(.borderlessButton).fixedSize().help("Choose where to search")
                         Button { model.query = "" } label: { Image(systemName: "xmark.circle.fill") }.buttonStyle(.plain).foregroundStyle(Color.muted).help("Clear search")
                     } else { Text("⌘F").font(.system(size: 10, design: .monospaced)).foregroundStyle(Color.muted.opacity(0.55)) }
                 }.padding(.horizontal, 14).padding(.vertical, 13).background(Color.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -203,11 +245,11 @@ struct LibraryView: View {
     private var emptyState: some View {
         VStack(spacing: 0) {
             NestMark().frame(width: 52, height: 52).padding(22).background(Color.sage.opacity(0.055), in: RoundedRectangle(cornerRadius: 25)).padding(.bottom, 24)
-            Text(model.query.isEmpty && model.selectedTag == nil && !model.notesOnly ? (model.filter == "Archive" ? "Nothing archived." : "A little room for good things.") : "No matching links.")
+            Text(model.query.isEmpty && !model.hasRefinements ? (model.filter == "Archive" ? "Nothing archived." : "A little room for good things.") : "No matching links.")
                 .font(.system(size: 22, weight: .semibold)).padding(.bottom, 12)
-            Text(model.query.isEmpty && model.selectedTag == nil && !model.notesOnly ? (model.filter == "Archive" ? "Swipe left on a saved link to move it here." : "Open a browser tab and press") : "Try fewer words, another tag, or clear your filters.")
+            Text(model.query.isEmpty && !model.hasRefinements ? (model.filter == "Archive" ? "Swipe left on a saved link to move it here." : "Open a browser tab and press") : "Try fewer words, another tag, or clear your filters.")
                 .font(.system(size: 12)).foregroundStyle(Color.muted)
-            if model.query.isEmpty && model.selectedTag == nil && !model.notesOnly && model.filter != "Archive" {
+            if model.query.isEmpty && !model.hasRefinements && model.filter != "Archive" {
                 Text(model.shortcut.label).font(.system(size: 17, weight: .medium, design: .monospaced))
                     .padding(.horizontal, 17).padding(.vertical, 10).nestSurface(radius: 10).padding(.top, 15)
                 Text("Saved instantly. Right here when you need it.").font(.system(size: 11)).foregroundStyle(Color.muted).padding(.top, 18)
@@ -258,7 +300,13 @@ struct LinkRow: View {
                 Button { model.open(link) } label: {
                     VStack(alignment: .leading, spacing: 5) {
                         Text(link.title).font(.system(size: 13, weight: .medium)).foregroundStyle(Color.ink).lineLimit(2).multilineTextAlignment(.leading)
-                        Text(link.domain).font(.system(size: 11)).foregroundStyle(Color.muted).lineLimit(1)
+                        HStack(spacing: 7) {
+                            Text(link.domain).font(.system(size: 11)).foregroundStyle(Color.muted).lineLimit(1)
+                            if link.isArchived {
+                                Text("Archived").font(.system(size: 9, weight: .semibold)).foregroundStyle(Color.muted)
+                                    .padding(.horizontal, 6).padding(.vertical, 2).background(Color.raised, in: Capsule())
+                            }
+                        }
                     }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
                 }.buttonStyle(.plain).help("Open in browser")
                 if hasNote {

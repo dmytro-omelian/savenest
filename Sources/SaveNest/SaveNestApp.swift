@@ -107,6 +107,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc private func captureSelected() { model.capture(action: .selected) }
     @objc private func captureNote() { model.capture(action: .note) }
     @objc private func captureTags() { model.capture(action: .tags) }
+    @objc private func closeDuplicateTabs() { model.closeDuplicateTabs() }
+    @objc private func cleanUpTabs() { model.runTabCleanup() }
     @objc private func saveClipboard() { model.saveCurrentClipboard() }
     private func openCaptureEditor(_ draft: CaptureDraft) {
         if editorDraftID == draft.id, let captureEditor {
@@ -162,6 +164,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let menu = NSMenu()
         menu.addItem(item("Open SaveNest", #selector(openLibrary)))
         menu.addItem(item("Search open tabs…", #selector(openTabSearch)))
+        menu.addItem(item("Close duplicate tabs", #selector(closeDuplicateTabs)))
+        menu.addItem(item("Clean up tabs…", #selector(cleanUpTabs)))
         menu.addItem(.separator())
         menu.addItem(item("Save current tab", #selector(captureTab)))
         menu.addItem(item("Save copied link", #selector(saveClipboard)))
@@ -184,6 +188,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let appRoot = NSMenuItem(); appRoot.submenu = app; main.addItem(appRoot)
         let file = NSMenu(title: "File")
         file.addItem(item("Search Open Tabs…", #selector(openTabSearch)))
+        file.addItem(item("Close Duplicate Tabs", #selector(closeDuplicateTabs)))
+        file.addItem(item("Clean Up Tabs…", #selector(cleanUpTabs)))
         file.addItem(item("Save Copied Link", #selector(saveClipboard)))
         file.addItem(item("Add Link…", #selector(addLink), key: "n")); file.addItem(item("Open Library", #selector(openLibrary), key: "0"))
         file.addItem(.separator()); file.addItem(item("Save Current Browser Tab", #selector(captureTab))); file.addItem(item("Save with a Note…", #selector(captureNote))); file.addItem(item("Save with Tags…", #selector(captureTags))); file.addItem(item("Save Selected Tabs…", #selector(captureSelected))); file.addItem(item("Save Browser Window", #selector(captureWindow)))

@@ -29,5 +29,34 @@ enum TabCloseScript {
         tab.close();
         return true;
     }
+    function closeBrowserTabs(app, targets) {
+        if (!app.running() || !Array.isArray(targets)) return 0;
+        let closed = 0;
+        const ordered = targets.slice().sort(function(a, b) {
+            if (String(a.windowID) !== String(b.windowID)) return 0;
+            return Number(b.index) - Number(a.index);
+        });
+        ordered.forEach(function(target) {
+            try {
+                const windowIndex = app.windows.id().map(String).indexOf(String(target.windowID));
+                if (windowIndex < 0) return;
+                const w = app.windows[windowIndex];
+                let tab;
+                if (target.safari) {
+                    const index = Number(target.index) - 1;
+                    if (index < 0 || index >= w.tabs.length) return;
+                    tab = w.tabs[index];
+                } else {
+                    const index = w.tabs.id().map(String).indexOf(String(target.tabID));
+                    if (index < 0) return;
+                    tab = w.tabs[index];
+                }
+                if (!tab || String(tab.url() || '') !== String(target.url || '')) return;
+                tab.close();
+                closed++;
+            } catch (_) { /* A moved, closed, or protected tab is left alone. */ }
+        });
+        return closed;
+    }
     """#
 }

@@ -60,4 +60,17 @@ for (const safari of [true, false]) {
 verify({safari:false,windowID:'4',tabs:[{id:'1',url:'https://example.com/a'}],target:{windowID:'4',tabID:'1'},expected:'1'});
 verify({safari:false,windowID:'4',tabs:[{id:'2',url:'https://example.com/a'}],target:{windowID:'4',tabID:'1'},expected:null});
 verify({target:{windowID:'4'},expected:1});
+const batch = fixture([
+  {id:1,url:'https://example.com/keep'},
+  {id:2,url:'https://example.com/duplicate'},
+  {id:3,url:'about:blank'}
+]);
+const batchTargets = [
+  {windowID:'4',tabID:'',index:2,url:'https://example.com/duplicate',safari:true},
+  {windowID:'4',tabID:'',index:3,url:'about:blank',safari:true},
+  {windowID:'4',tabID:'',index:1,url:'https://example.com/changed',safari:true}
+];
+assert.equal(runInNewContext(script + '\ncloseBrowserTabs(app, targets)', {app:batch.app,targets:batchTargets}), 2);
+assert.deepEqual(batch.closed, [3, 2]);
+checks++;
 console.log(`Passed ${checks} tab-close safety and performance checks`);

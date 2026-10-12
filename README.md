@@ -47,8 +47,9 @@ Use **SaveNest → Settings** (**⌘,**) to record each shortcut separately:
 | Save selected tabs | ⌘⌃⇧K |
 | Save all tabs in the current window | ⌘⌥⇧K |
 | Search open tabs | ⌘⇧O |
+| Close duplicate tabs | ⌘⇧D |
 
-Use the **Close tab after saving** switch beneath the Save link shortcut. Save-only is the default; your choice is remembered. Closing happens only after a successful library write (including a link already saved), and only for the originally captured browser tab. A navigated, missing, or ambiguous tab is left open with a saved-but-not-closed notice. Safari requires the original tab position and a unique URL; Chromium uses its tab ID. Note, tag, selected-tab, and whole-window capture keep tabs open.
+Settings → **After saving** can close the source tab after Save link, Save with a note, or Save with tags. Save-only is the default; your choice is remembered. Closing happens only after a successful library write or confirmed editor save (including a link already saved), and only for the originally captured browser tab. A navigated, missing, or ambiguous tab is left open with a saved-but-not-closed notice. Selected-tab and whole-window capture always keep tabs open.
 
 Your previously configured quick-save shortcut is preserved. Choose a key with Command, Option, or Control. Escape cancels recording. Conflicts with another SaveNest action are rejected; an unavailable system shortcut leaves the previous binding unchanged. Each row has its own reset button.
 
@@ -66,7 +67,7 @@ Settings → Clipboard → **Offer to save copied links** is off by default. Ena
 
 The new **Review importance** rail button opens a local feedback queue. Mark links **Important** or **Not needed**; show reviewed links to correct/reset a choice, or archive a Not needed link with Undo. Feedback is stored in `library.json` and backups, including archived training examples. Notes and favorites suggest Important. Otherwise the learner requires at least three distinct labeled URLs from the same website or overlapping tags, with at least 80% agreement. Sparse/conflicting evidence asks for a decision. This is an explainable local heuristic, not a cloud AI model. It never closes tabs, archives, or deletes automatically. Settings can disable suggestions or reset labels while keeping links and annotations. Opening an older backup without labels remains supported.
 
-Settings also offers an optional shortcut preset: **⇧⌘K** saves, **⇧⌘N** adds a note, **⇧⌘T** adds tags. Existing bindings are retained until selected; a registration conflict rolls back the entire preset. These combinations may overlap browser actions, so every binding remains configurable.
+Settings also offers an optional shortcut preset: **⇧⌘K** saves, **⇧⌘N** adds a note, **⌥⌘T** adds tags. Existing bindings are retained until selected; a registration conflict rolls back the entire preset. Every binding remains configurable.
 
 **Share anonymous usage counts** is enabled by default, announced by a dismissible library banner, and can be turned off in Settings or directly from the banner. Every 60 seconds, the app sends only fixed event names/counts to `https://savenest.app/api/usage`. It includes no account token, cookie, persistent installation/device identifier, URLs, titles, note text, tag names, clipboard contents, or importance choices. A fresh random batch ID prevents counting one upload twice. Turning reporting off clears pending counts, cancels in-flight requests, and discards the session. Events remain in memory only; offline, failed, short sessions, and shutdown activity may be missed. Reporting does not block saving. Counts already sent cannot be associated with an individual for deletion.
 
@@ -75,6 +76,10 @@ The service aggregates by UTC day, retaining approximately 90 days of counts and
 ## Open-tab search
 
 Press **⌘⇧O** from any app to open only the compact tab switcher, without activating SaveNest or raising the library. Clicking outside the switcher dismisses it. Search words across tab titles, URLs, and browser names; title matches rank first. **↑/↓** selects, **Return** switches to the existing tab, **⌘1–9** jumps directly, and **Escape** closes the panel. The shortcut is configurable in Settings. The list refreshes on opening and can be refreshed manually; cached results remain searchable during refresh. Safari and the supported Chromium adapters expose tabs in their open windows. Hidden Safari tab groups, Firefox, and embedded browser views are not included. All matching tabs from every scriptable Safari and Chrome window, including windows in different profiles, appear in one scrollable list, with ⌘1–9 shortcuts for the first nine. Use the bookmark button beside a result to save that specific tab without switching browsers; it stays open. Tab titles and URLs remain in memory unless you explicitly save a result.
+
+**⌘⇧D** closes exact duplicate web addresses within each supported browser window and removes known empty/new-tab pages. It keeps an active duplicate when the browser exposes that state and otherwise keeps the first copy. Separate windows and browser profiles are left independent, URLs with different queries or fragments remain separate, and tabs that move or navigate before closing are left open. This shortcut overlaps Chromium’s Bookmark all tabs command and can be changed in Settings.
+
+Settings → **Tab Cleanup** provides a separate, opt-in website cleanup. Add domains manually or from currently open tabs, inspect their matching titles and URLs, and choose **Ask before closing** or **Close immediately**. Cleanup only runs when requested and only touches matching HTTP(S) tabs. Turning it off disables website cleanup without removing the configured domain list.
 
 ## Library
 
@@ -86,8 +91,8 @@ Press **⌘⇧O** from any app to open only the compact tab switcher, without ac
 - Email opens a preview with an editable subject and an optional note (off by default). Include a note starts from your saved note without changing it. Open Mail prepares a draft; you choose the recipient and send it.
 - “Archive all links…” in Settings → Your library clears the active library after confirmation. Both individual and bulk archive/restore offer Undo in the footer for the last action.
 - “Empty archive…” lives inside Archive. It confirms the count before permanently deleting archived links, notes, and tags. Links outside Archive, restored links, and links added after the confirmation opened are kept.
-- Search titles, URLs, notes, and tags with **⌘F**. All keywords must match somewhere; results are ranked by relevance. Use **#tag** to match a single-word tag exactly.
-- Click a tag pill or use the Tags menu to filter. All, Favorites, Notes, and Archive keep the library in one compact view.
+- Search titles, full URLs, notes, tags, and archived links with **⌘F**. Search starts in Everywhere; scope it to Library, Favorites, Notes, or Archive when needed. Archived matches are labeled. All keywords must match somewhere and results are ranked by relevance. Use **#tag** to match a single-word tag exactly.
+- Refine results by tag, website, or whether a note is present. The same filters work inside Archive.
 - Add tags with Return or commas, reuse suggestions, and click a tag to remove it. Saving includes any unfinished tag input; **⌘Return** saves the editor.
 - Existing libraries and backups without tags load automatically; notes and saved dates are preserved.
 - A row’s **…** menu has copy, note/tag editing, Delete, and archive.
@@ -113,7 +118,7 @@ node scripts/check-tab-close.mjs
 node scripts/check-browser-tabs.mjs
 ```
 
-Thirty-three Swift checks cover library persistence, dates, browser selection, legacy migration, tags, keyword ranking, tag counts, annotation updates, title fallback, paid-access expiry, subscription payment recovery, delayed automatic access checks, polling timeout/cancellation, and forged, mismatched, or replayed native callbacks. Eighteen tab-close checks cover successful close, changed or closed windows/tabs, duplicate Safari URLs, and Chromium tab identity after reordering. Nine browser-tab checks cover mixed browser identity types, multiple profile windows with identical URLs, complete result lists, tab switching after reordering, navigation guards, and permission errors. Six additional Node checks execute the actual page reader against DOM fixtures, including unrelated posts and feed pages. The runner works with Command Line Tools alone; it does not require Xcode's XCTest framework.
+Thirty-five Swift checks cover library persistence, dates, browser selection, legacy migration, tags, keyword ranking, tab-cleanup planning, domain scoping, annotation updates, title fallback, paid-access expiry, subscription payment recovery, delayed automatic access checks, polling timeout/cancellation, and forged, mismatched, or replayed native callbacks. Nineteen tab-close checks cover successful and batch close, changed or closed windows/tabs, duplicate Safari URLs, and Chromium tab identity after reordering. Ten browser-tab checks cover mixed browser identity types, cleanup discovery, multiple profile windows with identical URLs, complete result lists, tab switching after reordering, navigation guards, and permission errors. Six additional Node checks execute the actual page reader against DOM fixtures, including unrelated posts and feed pages. The runner works with Command Line Tools alone; it does not require Xcode's XCTest framework.
 
 Run `./scripts/preview-app.sh` to open a separate **SaveNest Preview** app with an in-memory sample library. The preview has its own app identity, does not register account callbacks, and does not load or write the saved library or register global shortcuts. The fixture is also available by running `.build/debug/SaveNest --ui-preview` directly from a terminal.
 

@@ -7,6 +7,7 @@ struct CaptureDraft: Identifiable {
     var id: UUID { link.id }
     var link: SavedLink
     let action: CaptureAction
+    let closeTarget: CapturedTabTarget?
 }
 
 struct TabSelectionDraft: Identifiable {
@@ -14,6 +15,19 @@ struct TabSelectionDraft: Identifiable {
     let links: [SavedLink]
     var selected: Set<UUID>
     init(links: [SavedLink]) { self.links = links; selected = Set(links.map(\.id)) }
+}
+
+enum TabCleanupApproval: String, CaseIterable, Identifiable {
+    case ask, immediate
+    var id: String { rawValue }
+    var title: String { self == .ask ? "Ask before closing" : "Close immediately" }
+}
+
+struct TabCleanupDraft: Identifiable {
+    let id = UUID()
+    let tabs: [BrowserTabSnapshot]
+    var selected: Set<String>
+    init(tabs: [BrowserTabSnapshot]) { self.tabs = tabs; selected = Set(tabs.map(\.id)) }
 }
 
 enum AppSection { case library, tags, review, account, settings }
@@ -59,7 +73,9 @@ final class AppModel: ObservableObject {
     }
     @Published var filter = "All links"
     @Published var query = ""
+    @Published var searchEverywhere = true
     @Published var selectedTag: String?
+    @Published var selectedDomain: String?
     @Published var notesOnly = false
     @Published var section: AppSection = .library
     let tabSearch = TabSearchModel()
@@ -84,12 +100,27 @@ final class AppModel: ObservableObject {
     @Published var shortcutErrors: [CaptureAction: String] = [:]
     @Published var draft: CaptureDraft?
     @Published var tabSelection: TabSelectionDraft?
+    @Published var cleanupReview: TabCleanupDraft?
+    @Published private(set) var cleanupOpenTabs: [BrowserTabSnapshot] = []
+    @Published private(set) var isCleaningTabs = false
+    @Published var tabCleanupEnabled = UserDefaults.standard.bool(forKey: "tabCleanupEnabled") {
+        didSet { if !isPreview { UserDefaults.standard.set(tabCleanupEnabled, forKey: "tabCleanupEnabled") } }
+    }
+    @Published var tabCleanupApproval = TabCleanupApproval(rawValue: UserDefaults.standard.string(forKey: "tabCleanupApproval") ?? "ask") ?? .ask {
+        didSet { if !isPreview { UserDefaults.standard.set(tabCleanupApproval.rawValue, forKey: "tabCleanupApproval") } }
+    }
+    @Published private(set) var tabCleanupDomains: [String] = {
+        guard let data = UserDefaults.standard.data(forKey: "tabCleanupDomains"),
+              let values = try? JSONDecoder().decode([String].self, from: data) else { return [] }
+        return values
+    }()
     var shortcut: CaptureShortcut { shortcuts[.quick] ?? .standard }
     var shortcutError: String? { shortcutErrors.values.first }
     @Published var toast: CaptureNotice?
     private let file: LibraryFile
     private var loadFailed = false
     let captureService = BrowserCapture()
+    let tabCleanupService = BrowserTabCleanupService()
     let hotkey = GlobalShortcut()
     var showLibrary: (() -> Void)?
     var showSettings: (() -> Void)?
@@ -109,6 +140,15 @@ final class AppModel: ObservableObject {
         shortcuts = Dictionary(uniqueKeysWithValues: CaptureAction.allCases.map { action in
             (action, stored[action.rawValue] ?? (action == .quick ? legacy : nil) ?? action.defaultShortcut)
         })
+        if shortcuts[.quick] == CaptureAction.quick.memorableShortcut,
+           shortcuts[.note] == CaptureAction.note.memorableShortcut,
+           shortcuts[.tags] == CaptureShortcut.legacyTagsPreset {
+            shortcuts[.tags] = CaptureAction.tags.memorableShortcut
+            if !isPreview {
+                let migrated = Dictionary(uniqueKeysWithValues: shortcuts.map { ($0.key.rawValue, $0.value) })
+                UserDefaults.standard.set(try? JSONEncoder().encode(migrated), forKey: "captureShortcuts")
+            }
+        }
         tabSearch.save = { [weak self] tab in
             guard let self else { return false }
             return await self.saveOpenTab(tab)
@@ -152,18 +192,28 @@ final class AppModel: ObservableObject {
         for action in hotkey.register(shortcuts) { shortcutErrors[action] = "Already in use. Choose another shortcut." }
     }
     var visibleLinks: [SavedLink] {
-        library.links.filter { link in
-            let included: Bool
-            switch filter {
-            case "All links": included = !link.isArchived
-            case "Favorites": included = link.isFavorite && !link.isArchived
-            case "Archive": included = link.isArchived
-            default: included = link.collection == filter && !link.isArchived
-            }
-            return included && link.matches(query) && (!notesOnly || !link.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) && (selectedTag == nil || link.tags.contains { LinkSearch.folded($0) == LinkSearch.folded(selectedTag!) })
+        let searchingEverywhere = !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && searchEverywhere
+        return library.links.filter { link in
+            let included = searchingEverywhere || linkIsInCurrentSection(link)
+            let domainMatches = selectedDomain == nil || LinkSearch.folded(link.domain) == LinkSearch.folded(selectedDomain!)
+            return included && domainMatches && link.matches(query) && (!notesOnly || !link.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) && (selectedTag == nil || link.tags.contains { LinkSearch.folded($0) == LinkSearch.folded(selectedTag!) })
         }
     }
-    var tagSummaries: [TagSummary] { TagSummary.summarize(library.links.filter { $0.isArchived == (filter == "Archive") }) }
+    private func linkIsInCurrentSection(_ link: SavedLink) -> Bool {
+        switch filter {
+        case "All links": return !link.isArchived
+        case "Favorites": return link.isFavorite && !link.isArchived
+        case "Archive": return link.isArchived
+        default: return link.collection == filter && !link.isArchived
+        }
+    }
+    var tagSummaries: [TagSummary] {
+        let everywhere = !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && searchEverywhere
+        return TagSummary.summarize(library.links.filter { everywhere || linkIsInCurrentSection($0) })
+    }
+    var domainOptions: [String] {
+        Array(Set(library.links.map(\.domain).filter { !$0.isEmpty })).sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
     var allTags: [String] { TagSummary.summarize(library.links).map(\.name) }
     var allTagSummaries: [TagSummary] { TagSummary.summarize(library.links) }
     var isTagSearch: Bool { query.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("#") }
@@ -173,8 +223,13 @@ final class AppModel: ObservableObject {
         let folded = LinkSearch.folded(String(text))
         return allTagSummaries.filter { folded.isEmpty || LinkSearch.folded($0.name).contains(folded) }.prefix(8).map { $0 }
     }
-    func clearFilters() { query = ""; selectedTag = nil; notesOnly = false }
-    func selectTag(_ tag: String) { section = .library; filter = "All links"; notesOnly = false; selectedTag = tag; query = "" }
+    var searchScopeTitle: String {
+        if searchEverywhere { return "Everywhere" }
+        return filter == "All links" ? "Library" : filter
+    }
+    var hasRefinements: Bool { selectedTag != nil || selectedDomain != nil || notesOnly }
+    func clearFilters() { query = ""; selectedTag = nil; selectedDomain = nil; notesOnly = false; searchEverywhere = true }
+    func selectTag(_ tag: String) { section = .library; filter = "All links"; notesOnly = false; selectedDomain = nil; selectedTag = tag; query = "" }
     @discardableResult func renameTag(_ tag: String, to replacement: String) -> Bool {
         var next = library
         let changed = next.renameTag(tag, to: replacement)
@@ -206,10 +261,11 @@ final class AppModel: ObservableObject {
     }
     func capture(action: CaptureAction = .quick) {
         if action == .search { showTabSearch?(); return }
+        if action == .duplicates { closeDuplicateTabs(); return }
         if let draft { showCaptureEditor?(draft); return }
         guard !isCapturing else { return }
         isCapturing = true
-        let shouldClose = action == .quick && closeAfterQuickSave
+        let shouldClose = [.quick, .note, .tags].contains(action) && closeAfterQuickSave
         Task { @MainActor in
             defer { isCapturing = false }
             guard await authorizeSaving() else { return }
@@ -235,7 +291,7 @@ final class AppModel: ObservableObject {
                         if let iconURL { link.iconURL = iconURL }
                         if LinkTitle.isGeneric(link.title) { link.title = improved }
                     }
-                    beginDraft(link, action: action)
+                    beginDraft(link, action: action, closeTarget: captured.closeTarget)
                     return
                 }
                 let saved = saveCaptured(links)
@@ -422,13 +478,14 @@ final class AppModel: ObservableObject {
     private func restoreShortcuts() {
         for action in hotkey.register(shortcuts) { shortcutErrors[action] = "Unavailable. Choose another shortcut." }
     }
-    func beginDraft(_ link: SavedLink, action: CaptureAction) {
+    func beginDraft(_ link: SavedLink, action: CaptureAction, closeTarget: CapturedTabTarget? = nil) {
         if let draft { showCaptureEditor?(draft); return }
-        let draft = CaptureDraft(link: link, action: action)
+        let draft = CaptureDraft(link: link, action: action, closeTarget: closeTarget)
         self.draft = draft; showCaptureEditor?(draft)
     }
     @discardableResult func saveDraft(_ link: SavedLink) async -> Bool {
         guard await authorizeSaving() else { return false }
+        let closeTarget = draft?.id == link.id ? draft?.closeTarget : nil
         var next = library
         let isNew = !next.links.contains { Library.identity($0.url) == Library.identity(link.url) }
         guard next.saveAnnotated(link) else { notify(CaptureNotice(title: "Couldn’t save this link", message: "The web address is invalid.", isError: true)); return false }
@@ -438,7 +495,12 @@ final class AppModel: ObservableObject {
         if !link.note.isEmpty { analytics.record(.noteSaved) }
         if !link.tags.isEmpty { analytics.record(.tagsSaved) }
         draft = nil; closeCaptureEditor?()
-        notify(CaptureNotice(title: "Link saved", message: "Your note and tags are safely in your library."))
+        if let closeTarget {
+            let closed = await captureService.closeSavedTab(closeTarget)
+            notify(CaptureNotice(title: closed ? "Saved & closed" : "Saved · tab left open", message: closed ? "Your note and tags are safely in your library." : "The tab changed or couldn’t be closed safely. Your note and tags are saved."))
+        } else {
+            notify(CaptureNotice(title: "Link saved", message: "Your note and tags are safely in your library."))
+        }
         return true
     }
     func cancelDraft() { draft = nil; closeCaptureEditor?() }
@@ -532,6 +594,118 @@ final class AppModel: ObservableObject {
         shortcuts = candidate; shortcutErrors = [:]
         let saved = Dictionary(uniqueKeysWithValues: shortcuts.map { ($0.key.rawValue, $0.value) })
         UserDefaults.standard.set(try? JSONEncoder().encode(saved), forKey: "captureShortcuts")
+    }
+    @discardableResult func addCleanupDomain(_ raw: String) -> Bool {
+        guard let domain = TabCleanupPlanner.normalizedDomain(raw) else {
+            error = "Enter a website such as example.com."
+            return false
+        }
+        guard !tabCleanupDomains.contains(domain) else { return true }
+        tabCleanupDomains.append(domain)
+        tabCleanupDomains.sort { $0.localizedStandardCompare($1) == .orderedAscending }
+        persistCleanupDomains()
+        return true
+    }
+    func removeCleanupDomain(_ domain: String) {
+        tabCleanupDomains.removeAll { $0 == domain }
+        persistCleanupDomains()
+    }
+    private func persistCleanupDomains() {
+        guard !isPreview else { return }
+        UserDefaults.standard.set(try? JSONEncoder().encode(tabCleanupDomains), forKey: "tabCleanupDomains")
+    }
+    func refreshCleanupOpenTabs() {
+        guard !isCleaningTabs else { return }
+        isCleaningTabs = true
+        Task { @MainActor in
+            let result = await tabCleanupService.readTabs()
+            cleanupOpenTabs = result.tabs
+            isCleaningTabs = false
+            if !result.failedBrowsers.isEmpty {
+                error = "Couldn’t read \(result.failedBrowsers.joined(separator: ", ")). Check Automation access and try again."
+            }
+        }
+    }
+    func closeDuplicateTabs() {
+        guard !isCleaningTabs else { return }
+        isCleaningTabs = true
+        Task { @MainActor in
+            let read = await tabCleanupService.readTabs()
+            let candidates = TabCleanupPlanner.duplicateAndEmptyCandidates(read.tabs)
+            guard !candidates.isEmpty else {
+                isCleaningTabs = false
+                if !read.failedBrowsers.isEmpty {
+                    notify(CaptureNotice(title: "Couldn’t inspect every browser", message: "Check Automation access for \(read.failedBrowsers.joined(separator: ", ")), then try again.", isError: true))
+                } else {
+                    let message = read.foundBrowser ? "No duplicate or empty tabs found." : "Open a supported browser, then try again."
+                    notify(CaptureNotice(title: "Tabs already tidy", message: message, isError: !read.foundBrowser))
+                }
+                return
+            }
+            let result = await tabCleanupService.close(candidates)
+            isCleaningTabs = false
+            notifyCleanupResult(result, title: "Duplicate tabs cleaned up")
+        }
+    }
+    func runTabCleanup() {
+        guard tabCleanupEnabled else {
+            notify(CaptureNotice(title: "Tab Cleanup is off", message: "Turn it on in Settings before running a website cleanup.", isError: true))
+            return
+        }
+        guard !tabCleanupDomains.isEmpty else {
+            notify(CaptureNotice(title: "Choose cleanup websites", message: "Add at least one website in Settings before running cleanup.", isError: true))
+            return
+        }
+        guard !isCleaningTabs else { return }
+        isCleaningTabs = true
+        Task { @MainActor in
+            let read = await tabCleanupService.readTabs()
+            cleanupOpenTabs = read.tabs
+            let candidates = TabCleanupPlanner.domainCandidates(read.tabs, domains: tabCleanupDomains)
+            isCleaningTabs = false
+            guard !candidates.isEmpty else {
+                if !read.failedBrowsers.isEmpty {
+                    notify(CaptureNotice(title: "Couldn’t inspect every browser", message: "Check Automation access for \(read.failedBrowsers.joined(separator: ", ")), then try again.", isError: true))
+                } else {
+                    notify(CaptureNotice(title: "Nothing to clean up", message: read.foundBrowser ? "No open tabs match your cleanup websites." : "Open a supported browser, then try again.", isError: !read.foundBrowser))
+                }
+                return
+            }
+            if tabCleanupApproval == .ask {
+                cleanupReview = TabCleanupDraft(tabs: candidates)
+                showLibrary?()
+            } else {
+                isCleaningTabs = true
+                let result = await tabCleanupService.close(candidates)
+                isCleaningTabs = false
+                notifyCleanupResult(result, title: "Tabs cleaned up")
+            }
+        }
+    }
+    func updateCleanupSelection(_ selected: Set<String>) {
+        guard var draft = cleanupReview else { return }
+        draft.selected = selected; cleanupReview = draft
+    }
+    func cancelCleanupReview() { cleanupReview = nil }
+    func confirmCleanupReview() {
+        guard let draft = cleanupReview else { return }
+        let tabs = draft.tabs.filter { draft.selected.contains($0.id) }
+        guard !tabs.isEmpty else { return }
+        cleanupReview = nil; isCleaningTabs = true
+        Task { @MainActor in
+            let result = await tabCleanupService.close(tabs)
+            isCleaningTabs = false
+            notifyCleanupResult(result, title: "Tabs cleaned up")
+        }
+    }
+    private func notifyCleanupResult(_ result: TabCleanupCloseResult, title: String) {
+        if result.closed == 0 {
+            notify(CaptureNotice(title: "No tabs closed", message: "The tabs moved, changed, or couldn’t be closed safely.", isError: true))
+            return
+        }
+        let skipped = result.requested - result.closed
+        let detail = skipped == 0 ? "\(result.closed) \(result.closed == 1 ? "tab" : "tabs") closed." : "\(result.closed) closed · \(skipped) left open because they changed or moved."
+        notify(CaptureNotice(title: title, message: detail, isError: !result.failedBrowsers.isEmpty))
     }
     func revealLibrary() { NSWorkspace.shared.selectFile(file.url.path, inFileViewerRootedAtPath: file.url.deletingLastPathComponent().path) }
 }
