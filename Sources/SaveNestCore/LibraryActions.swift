@@ -1,6 +1,29 @@
 import Foundation
 
 public extension Library {
+    @discardableResult mutating func renameTag(_ tag: String, to replacement: String) -> Int {
+        let source = LinkSearch.folded(tag.trimmingCharacters(in: .whitespacesAndNewlines))
+        let normalized = SavedLink.normalizedTags([replacement]).first
+        guard !source.isEmpty, let normalized else { return 0 }
+        var changed = 0
+        for index in links.indices {
+            guard links[index].tags.contains(where: { LinkSearch.folded($0) == source }) else { continue }
+            let updated = SavedLink.normalizedTags(links[index].tags.map { LinkSearch.folded($0) == source ? normalized : $0 })
+            if updated != links[index].tags { links[index].tags = updated; changed += 1 }
+        }
+        return changed
+    }
+
+    @discardableResult mutating func deleteTag(_ tag: String) -> Int {
+        let folded = LinkSearch.folded(tag)
+        var changed = 0
+        for index in links.indices {
+            let updated = links[index].tags.filter { LinkSearch.folded($0) != folded }
+            if updated != links[index].tags { links[index].tags = updated; changed += 1 }
+        }
+        return changed
+    }
+
     /// Return only changed IDs, so Undo never restores unrelated archive entries.
     @discardableResult mutating func setArchived(_ archived: Bool, ids: Set<UUID>) -> Set<UUID> {
         var changed = Set<UUID>()

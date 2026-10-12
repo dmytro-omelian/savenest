@@ -2,6 +2,17 @@ import Foundation
 import SaveNestCore
 
 final class LibraryTests {
+    func testLegacyReadStateIsIgnored() throws {
+        let link = SavedLink(url: "https://example.com/read", title: "Read")
+        let data = try JSONEncoder().encode(link)
+        var object = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        object["isRead"] = true
+        let legacyData = try JSONSerialization.data(withJSONObject: object)
+        let decoded = try JSONDecoder().decode(SavedLink.self, from: legacyData)
+        XCTAssertEqual(decoded.url, link.url)
+        XCTAssertFalse(String(data: try JSONEncoder().encode(decoded), encoding: .utf8)!.contains("isRead"))
+    }
+
     func testArchiveUndoPreservesEditsAndExistingArchive() {
         var library = Library()
         var old = SavedLink(url: "https://example.com/old", title: "Old"); old.isArchived = true
@@ -13,6 +24,17 @@ final class LibraryTests {
         library.setArchived(false, ids: changed)
         XCTAssertTrue(library.links[0].isArchived); XCTAssertFalse(library.links[1].isArchived)
         XCTAssertEqual(library.links[1].note, "Edited after archiving"); XCTAssertEqual(library.links[1].tags, ["Keep"])
+    }
+    func testTagManagementRenamesAndDeletesAcrossLinks() {
+        var library = Library()
+        var first = SavedLink(url: "https://example.com/one", title: "One"); first.tags = ["Design", "Mac"]
+        var second = SavedLink(url: "https://example.com/two", title: "Two"); second.tags = ["design"]
+        library.links = [first, second]
+        XCTAssertEqual(library.renameTag("design", to: "Product design"), 2)
+        XCTAssertEqual(library.links[0].tags, ["Product design", "Mac"])
+        XCTAssertEqual(library.links[1].tags, ["Product design"])
+        XCTAssertEqual(library.deleteTag("mac"), 1)
+        XCTAssertEqual(library.links[0].tags, ["Product design"])
     }
     func testEmptyArchiveDeletesOnlyConfirmedStillArchivedLinks() {
         var library = Library()
@@ -352,11 +374,13 @@ func XCTAssertThrowsError<T>(_ expression: @autoclosure () throws -> T) {
         await tests.testBillingPollTimesOutWithoutGrantingAccess()
         await tests.testBillingPollStopsOnCancellation()
         tests.testArchiveUndoPreservesEditsAndExistingArchive()
+        tests.testTagManagementRenamesAndDeletesAcrossLinks()
+        try tests.testLegacyReadStateIsIgnored()
         tests.testEmptyArchiveDeletesOnlyConfirmedStillArchivedLinks()
         tests.testEmailShareOnlyIncludesExplicitlyChosenNote()
         tests.testSwipeLocksDirectionAndRequiresIntentionalDistance()
         tests.testSiteIconURLsAndHTMLFallback()
         try tests.testIconMetadataSurvivesLibraryRoundTripAndLegacySaves()
-        print("Passed 26 SaveNest checks")
+        print("Passed 28 SaveNest checks")
     }
 }

@@ -16,6 +16,8 @@ struct TabSelectionDraft: Identifiable {
     init(links: [SavedLink]) { self.links = links; selected = Set(links.map(\.id)) }
 }
 
+enum AppSection { case library, tags, account, settings }
+
 @MainActor
 final class AppModel: ObservableObject {
     let account = AccountController()
@@ -27,11 +29,14 @@ final class AppModel: ObservableObject {
     @Published var query = ""
     @Published var selectedTag: String?
     @Published var notesOnly = false
+    @Published var section: AppSection = .library
     let tabSearch = TabSearchModel()
     var showTabSearch: (() -> Void)?
     @Published var selectedID: UUID?
     @Published var sharingLink: SavedLink?
     @Published var swipedLinkID: UUID?
+    @Published var showingOnboarding = false
+    @Published private(set) var onboardingCompleted = true
     @Published private(set) var archiveUndo: ArchiveUndo?
     struct ArchiveUndo {
         let ids: Set<UUID>
@@ -98,7 +103,15 @@ final class AppModel: ObservableObject {
         #endif
         do { library = try file.load() }
         catch { loadFailed = true; self.error = "Your saved library couldn’t be opened. The original file has been kept untouched at \(file.url.path). Restore a valid backup there, then restart SaveNest. \(error.localizedDescription)" }
-        account.onChange = { [weak self] in self?.objectWillChange.send() }
+        if !isPreview && !loadFailed {
+            onboardingCompleted = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
+            showingOnboarding = !onboardingCompleted
+        }
+        account.onChange = { [weak self] in
+            guard let self else { return }
+            self.showOnboardingIfNeededForActiveAccount()
+            self.objectWillChange.send()
+        }
         hotkey.action = { [weak self] action in self?.capture(action: action) }
         for action in hotkey.register(shortcuts) { shortcutErrors[action] = "Already in use. Choose another shortcut." }
     }
@@ -116,7 +129,32 @@ final class AppModel: ObservableObject {
     }
     var tagSummaries: [TagSummary] { TagSummary.summarize(library.links.filter { $0.isArchived == (filter == "Archive") }) }
     var allTags: [String] { TagSummary.summarize(library.links).map(\.name) }
+    var allTagSummaries: [TagSummary] { TagSummary.summarize(library.links) }
+    var isTagSearch: Bool { query.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("#") }
+    var tagSearchSuggestions: [TagSummary] {
+        guard isTagSearch else { return [] }
+        let text = query.trimmingCharacters(in: .whitespacesAndNewlines).dropFirst()
+        let folded = LinkSearch.folded(String(text))
+        return allTagSummaries.filter { folded.isEmpty || LinkSearch.folded($0.name).contains(folded) }.prefix(8).map { $0 }
+    }
     func clearFilters() { query = ""; selectedTag = nil; notesOnly = false }
+    func selectTag(_ tag: String) { section = .library; filter = "All links"; notesOnly = false; selectedTag = tag; query = "" }
+    @discardableResult func renameTag(_ tag: String, to replacement: String) -> Bool {
+        var next = library
+        let changed = next.renameTag(tag, to: replacement)
+        guard changed > 0, commit(next) else { return false }
+        if LinkSearch.folded(selectedTag ?? "") == LinkSearch.folded(tag) { selectedTag = SavedLink.normalizedTags([replacement]).first }
+        notify(changed == 1 ? "Tag updated on 1 link" : "Tag updated on (changed) links")
+        return true
+    }
+    @discardableResult func deleteTag(_ tag: String) -> Bool {
+        var next = library
+        let changed = next.deleteTag(tag)
+        guard changed > 0, commit(next) else { return false }
+        if LinkSearch.folded(selectedTag ?? "") == LinkSearch.folded(tag) { selectedTag = nil }
+        notify(changed == 1 ? "Tag removed from 1 link" : "Tag removed from (changed) links")
+        return true
+    }
     var selected: SavedLink? { library.links.first { $0.id == selectedID } }
     var activeCount: Int { library.links.filter { !$0.isArchived }.count }
     @discardableResult private func commit(_ next: Library, captureFeedback: Bool = false) -> Bool {
@@ -263,6 +301,32 @@ final class AppModel: ObservableObject {
         notify(CaptureNotice(title: "Archive emptied", message: "\(removed) " + (removed == 1 ? "link permanently deleted." : "links permanently deleted.")))
     }
     func share(_ link: SavedLink) { swipedLinkID = nil; sharingLink = link }
+
+    func completeOnboarding() {
+        if let accountID = account.account?.user.id {
+            UserDefaults.standard.set(true, forKey: onboardingKey(for: accountID))
+        } else {
+            UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+        }
+        onboardingCompleted = true
+        showingOnboarding = false
+    }
+    func showOnboarding() { showingOnboarding = true }
+
+    private func onboardingKey(for accountID: String) -> String {
+        "hasCompletedOnboarding.\(accountID)"
+    }
+
+    private func showOnboardingIfNeededForActiveAccount() {
+        guard !isPreview, !loadFailed, account.canSave else { return }
+        let completed = if let accountID = account.account?.user.id {
+            UserDefaults.standard.bool(forKey: onboardingKey(for: accountID))
+        } else {
+            UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
+        }
+        onboardingCompleted = completed
+        if !completed { showingOnboarding = true }
+    }
 
     func delete(_ link: SavedLink) {
         var next = library; next.links.removeAll { $0.id == link.id }

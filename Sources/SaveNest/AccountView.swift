@@ -2,9 +2,12 @@ import SwiftUI
 
 struct AccountView: View {
     @ObservedObject var account: AccountController
+    var onBack: () -> Void = {}
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
+                Button { onBack() } label: { Label("Library", systemImage: "chevron.left") }
+                    .buttonStyle(.plain).font(.system(size: 12, weight: .medium)).foregroundStyle(Color.muted)
                 HStack(spacing: 10) { NestMark().frame(width: 30, height: 30); Text("savenest").font(.system(size: 23, weight: .semibold)).tracking(-0.8) }
                 sheetHeading(account.hasLogin ? "Your little corner." : "A home for your good finds.", subtitle: account.hasLogin ? "Your account and subscription." : "Sign in, subscribe for $1.99/month, and start saving.")
                 if let details = account.account {
@@ -13,7 +16,12 @@ struct AccountView: View {
                         Text(details.user.email).font(.system(size: 12)).foregroundStyle(Color.muted).textSelection(.enabled)
                         if account.canSave {
                             Label("Subscription active", systemImage: "checkmark.circle.fill").font(.system(size: 12)).foregroundStyle(Color.sage).padding(.top, 4)
-                            if let date = details.subscription.renewsAt { Text("Current period ends \(Date(timeIntervalSince1970: date).formatted(date: .abbreviated, time: .omitted))").font(.system(size: 11)).foregroundStyle(Color.muted) }
+                            if let date = details.subscription.renewsAt {
+                                Text(details.subscription.cancelAtPeriodEnd
+                                     ? "Your service will end on \(Date(timeIntervalSince1970: date).formatted(date: .long, time: .omitted))."
+                                     : "Current period ends \(Date(timeIntervalSince1970: date).formatted(date: .abbreviated, time: .omitted))")
+                                    .font(.system(size: 11)).foregroundStyle(Color.muted)
+                            }
                         } else {
                             Text(account.subscriptionUnavailable || details.subscription.active
                                  ? "Refresh access to verify your subscription."
@@ -60,7 +68,7 @@ struct AccountView: View {
                 if account.hasLogin {
                     HStack(spacing: 16) {
                         Button("Refresh access") { Task { await account.refresh(force: true) } }.buttonStyle(QuietButton()).disabled(account.isBusy)
-                        if account.canManageBilling { Button("Manage billing ↗") { Task { await account.openBilling() } }.buttonStyle(.link).disabled(account.isBusy) }
+                        if account.canManageBilling { Button("Manage or cancel subscription ↗") { Task { await account.openBilling() } }.buttonStyle(.link).disabled(account.isBusy) }
                         if account.billingStage == .waiting || account.billingStage == .checking {
                             Button("Stop waiting") { account.cancelBilling() }.buttonStyle(.link)
                         }
@@ -69,10 +77,15 @@ struct AccountView: View {
                         Button("Sign out") { account.signOut() }.buttonStyle(.link).disabled(account.isBusy)
                     }
                 }
+                if account.canManageBilling {
+                    Link("Need help? Contact dima@omelabs.org", destination: URL(string: "mailto:dima@omelabs.org")!).font(.system(size: 11)).foregroundStyle(Color.muted)
+                }
                 Divider()
                 Text("Links and notes stay on your Mac. Signing out keeps your library available to open and export.").font(.system(size: 11)).foregroundStyle(Color.muted).lineSpacing(4)
             }.padding(30)
-        }.frame(width: 520, height: 660).background(Color.paper).foregroundStyle(Color.ink).preferredColorScheme(.light)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Color.paper).foregroundStyle(Color.ink).preferredColorScheme(.light)
     }
     private func plan(_ title: String, amount: String, offer: String, renewal: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 9) {

@@ -16,8 +16,6 @@ enum SaveNestApp {
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var model: AppModel!
     private var libraryWindow: NSWindow!
-    private var settingsWindow: NSWindow?
-    private var accountWindow: NSWindow?
     private var captureEditor: NSPanel?
     private var tabSelectionPanel: NSPanel?
     private var tabSearchPanel: NSPanel?
@@ -35,7 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         model.tabSearch.close = { [weak self] in self?.tabSearchPanel?.orderOut(nil) }
         model.showLibrary = { [weak self] in self?.openLibrary() }
         model.showAccount = { [weak self] in self?.openAccount() }
-        model.account.presentationWindow = { [weak self] in self?.accountWindow ?? self?.libraryWindow }
+        model.account.presentationWindow = { [weak self] in self?.libraryWindow }
         model.account.bringAccountForward = { [weak self] in self?.openAccount() }
         model.showSettings = { [weak self] in self?.openSettings() }
         model.showCaptureEditor = { [weak self] draft in self?.openCaptureEditor(draft) }
@@ -43,7 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         model.showTabSelection = { [weak self] draft in self?.openTabSelection(draft) }
         model.closeTabSelection = { [weak self] in self?.closeTabSelection() }
         model.showToast = { [weak self] message in self?.presentToast(message) }
-        let root = LibraryView(model: model)
+        let root = AppRootView(model: model)
         libraryWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 750, height: 680), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
         libraryWindow.title = model.isPreview ? "SaveNest Preview — Sample library" : "SaveNest"; libraryWindow.titleVisibility = model.isPreview ? .visible : .hidden
         libraryWindow.titlebarAppearsTransparent = true; libraryWindow.isReleasedWhenClosed = false
@@ -86,22 +84,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         tabSearchPanel?.makeKeyAndOrderFront(nil)
     }
     @objc func openSettings() {
-        if settingsWindow == nil {
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 614, height: 660), styleMask: [.titled, .closable], backing: .buffered, defer: false)
-            window.title = "SaveNest Settings"; window.isReleasedWhenClosed = false
-            window.contentView = NSHostingView(rootView: SettingsView(model: model)); window.center()
-            settingsWindow = window
-        }
-        settingsWindow?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+        model.section = .settings
+        openLibrary()
     }
     @objc func openAccount() {
-        if accountWindow == nil {
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 660), styleMask: [.titled, .closable], backing: .buffered, defer: false)
-            window.title = "SaveNest Account"; window.isReleasedWhenClosed = false
-            window.contentView = NSHostingView(rootView: AccountView(account: model.account)); window.center()
-            accountWindow = window
-        }
-        accountWindow?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+        model.section = .account
+        openLibrary()
         if !model.isPreview { Task { await model.account.synchronizeLogin() } }
     }
     @objc private func captureTab() { model.capture(action: .quick) }

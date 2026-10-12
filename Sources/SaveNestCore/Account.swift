@@ -14,8 +14,19 @@ public struct SaveNestAccount: Codable, Equatable {
         public let mode: String
         /// Stripe's billing-period end, in Unix seconds.
         public let renewsAt: Double?
-        public init(active: Bool, plan: String?, status: String, mode: String, renewsAt: Double?) {
-            self.active = active; self.plan = plan; self.status = status; self.mode = mode; self.renewsAt = renewsAt
+        public let cancelAtPeriodEnd: Bool
+        public init(active: Bool, plan: String?, status: String, mode: String, renewsAt: Double?, cancelAtPeriodEnd: Bool = false) {
+            self.active = active; self.plan = plan; self.status = status; self.mode = mode; self.renewsAt = renewsAt; self.cancelAtPeriodEnd = cancelAtPeriodEnd
+        }
+        enum CodingKeys: String, CodingKey { case active, plan, status, mode, renewsAt, cancelAtPeriodEnd }
+        public init(from decoder: Decoder) throws {
+            let values = try decoder.container(keyedBy: CodingKeys.self)
+            active = try values.decode(Bool.self, forKey: .active)
+            plan = try values.decodeIfPresent(String.self, forKey: .plan)
+            status = try values.decode(String.self, forKey: .status)
+            mode = try values.decode(String.self, forKey: .mode)
+            renewsAt = try values.decodeIfPresent(Double.self, forKey: .renewsAt)
+            cancelAtPeriodEnd = try values.decodeIfPresent(Bool.self, forKey: .cancelAtPeriodEnd) ?? false
         }
     }
     public let user: User

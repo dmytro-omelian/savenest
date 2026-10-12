@@ -25,6 +25,7 @@ struct LibraryView: View {
     var body: some View {
         VStack(spacing: 0) {
             toolbar
+            if !model.onboardingCompleted { onboardingBanner }
             if !model.isPreview { AccountBanner(account: model.account, openAccount: { model.showAccount?() }) }
             filters
             if model.filter == "Archive" && !model.archivedIDs.isEmpty {
@@ -39,7 +40,14 @@ struct LibraryView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     if !model.query.isEmpty || model.selectedTag != nil || model.notesOnly {
                         HStack {
-                            Text(model.query.isEmpty ? "Filtered library" : "Results for “\(model.query)”").font(.system(size: 12)).foregroundStyle(Color.muted).lineLimit(1)
+                            if let tag = model.selectedTag {
+                                Label("#\(tag)", systemImage: "number")
+                                    .font(.system(size: 12, weight: .medium)).foregroundStyle(Color.sage)
+                                    .padding(.horizontal, 9).padding(.vertical, 5)
+                                    .background(Color.sage.opacity(0.10), in: Capsule())
+                            } else {
+                                Text(model.query.isEmpty ? "Filtered library" : "Results for “\(model.query)”").font(.system(size: 12)).foregroundStyle(Color.muted).lineLimit(1)
+                            }
                             Spacer()
                             Button("Clear filters") { model.clearFilters() }.buttonStyle(.link).font(.system(size: 11))
                         }
@@ -82,6 +90,7 @@ struct LibraryView: View {
         }
         .sheet(isPresented: $model.showingAdd) { AddLinkView(model: model) }
         .sheet(item: Binding(get: { model.selected }, set: { model.selectedID = $0?.id })) { link in LinkDetailView(model: model, link: link) }
+        .sheet(isPresented: $model.showingOnboarding) { OnboardingView(model: model) }
         .alert("Couldn’t finish that", isPresented: Binding(get: { model.error != nil && !model.showingAdd && model.selectedID == nil && model.sharingLink == nil && bulkAction == nil }, set: { if !$0 { model.error = nil } })) {
             Button("OK", role: .cancel) { model.error = nil }
             if model.error?.contains("Automation") == true {
@@ -102,6 +111,9 @@ struct LibraryView: View {
                 Text("Notes").font(.system(size: 12, weight: model.notesOnly ? .semibold : .regular)).foregroundStyle(model.notesOnly ? Color.ink : Color.muted)
             }.buttonStyle(.plain).help("Show links with notes")
             scope("Archive", filter: "Archive")
+            Button { model.section = .tags } label: {
+                Text("Tags").font(.system(size: 12, weight: model.section == .tags ? .semibold : .regular)).foregroundStyle(Color.muted)
+            }.buttonStyle(.plain).help("Manage tags")
             Spacer()
             Menu {
                 Button("All tags") { model.selectedTag = nil }
@@ -113,6 +125,21 @@ struct LibraryView: View {
                 .menuStyle(.borderlessButton).fixedSize().font(.system(size: 11)).foregroundStyle(Color.muted)
             Text("\(model.visibleLinks.count)").font(.system(size: 10, design: .monospaced)).foregroundStyle(Color.muted.opacity(0.7))
         }.padding(.horizontal, 38).padding(.top, 19).padding(.bottom, 7)
+    }
+    private var onboardingBanner: some View {
+        HStack(spacing: 11) {
+            Image(systemName: "sparkles").font(.system(size: 13, weight: .medium)).foregroundStyle(Color.sage)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Finish setting up SaveNest").font(.system(size: 11, weight: .medium))
+                Text("Take the 45-second tour to learn the shortcuts and gestures.").font(.system(size: 10)).foregroundStyle(Color.muted)
+            }
+            Spacer()
+            Button("Continue") { model.showOnboarding() }.buttonStyle(QuietButton())
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .background(Color.sage.opacity(0.065), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.sage.opacity(0.13)))
+        .padding(.horizontal, 34).padding(.top, 15)
     }
     private func scope(_ title: String, filter: String) -> some View {
         Button { model.filter = filter; model.notesOnly = false; model.selectedTag = nil } label: {
@@ -137,14 +164,30 @@ struct LibraryView: View {
                     Button("Export backup…") { model.exportLibrary() }
                 } label: { Image(systemName: "ellipsis").font(.system(size: 14)) }.menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().help("Library options")
             }
-            HStack(spacing: 9) {
-                Image(systemName: "magnifyingglass").font(.system(size: 14)).foregroundStyle(Color.muted)
-                TextField("Search your library", text: $model.query).textFieldStyle(.plain).font(.system(size: 14)).focused($searchFocused)
-                    .help("Search titles, websites, notes, and tags. Use #tag for an exact tag.")
-                if !model.query.isEmpty {
-                    Button { model.query = "" } label: { Image(systemName: "xmark.circle.fill") }.buttonStyle(.plain).foregroundStyle(Color.muted).help("Clear search")
-                } else { Text("⌘F").font(.system(size: 10, design: .monospaced)).foregroundStyle(Color.muted.opacity(0.55)) }
-            }.padding(12).background(Color.white.opacity(0.65), in: RoundedRectangle(cornerRadius: 9)).overlay(RoundedRectangle(cornerRadius: 9).stroke(Color.line.opacity(searchFocused ? 1 : 0.55)))
+            ZStack(alignment: .topLeading) {
+                HStack(spacing: 9) {
+                    Image(systemName: "magnifyingglass").font(.system(size: 14)).foregroundStyle(model.isTagSearch ? Color.sage : Color.muted)
+                    TextField("Search your library", text: $model.query).textFieldStyle(.plain).font(.system(size: 14)).foregroundStyle(model.isTagSearch ? Color.sage : Color.ink).focused($searchFocused)
+                        .help("Search titles, websites, notes, and tags. Type # to find a tag.")
+                    if !model.query.isEmpty {
+                        Button { model.query = "" } label: { Image(systemName: "xmark.circle.fill") }.buttonStyle(.plain).foregroundStyle(Color.muted).help("Clear search")
+                    } else { Text("⌘F").font(.system(size: 10, design: .monospaced)).foregroundStyle(Color.muted.opacity(0.55)) }
+                }.padding(12).background(Color.white.opacity(0.65), in: RoundedRectangle(cornerRadius: 9)).overlay(RoundedRectangle(cornerRadius: 9).stroke(model.isTagSearch ? Color.sage.opacity(0.55) : Color.line.opacity(searchFocused ? 1 : 0.55)))
+                if searchFocused && model.isTagSearch && !model.tagSearchSuggestions.isEmpty {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("TAGS").font(.system(size: 9, weight: .semibold)).tracking(1.2).foregroundStyle(Color.muted).padding(.horizontal, 13).padding(.top, 10).padding(.bottom, 6)
+                        ForEach(model.tagSearchSuggestions) { tag in
+                            Button { model.selectTag(tag.name); searchFocused = false } label: {
+                                HStack {
+                                    Text("#\(tag.name)").font(.system(size: 12, weight: .medium)).foregroundStyle(Color.sage)
+                                    Spacer()
+                                    Text("\(tag.count)").font(.system(size: 10, design: .monospaced)).foregroundStyle(Color.muted)
+                                }.padding(.horizontal, 13).padding(.vertical, 8).contentShape(Rectangle())
+                            }.buttonStyle(.plain)
+                        }
+                    }.frame(width: 250, alignment: .leading).background(Color.paper, in: RoundedRectangle(cornerRadius: 10)).overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.line)).shadow(color: .black.opacity(0.10), radius: 12, y: 5).offset(y: 47)
+                }
+            }
         }.padding(.horizontal, 34).padding(.top, 22).padding(.bottom, 0)
     }
     private var emptyState: some View {
@@ -233,6 +276,7 @@ struct LinkRow: View {
                     Button("Share by email…") { model.share(link) }
                     Button("Edit title, note & tags…") { model.selectedID = link.id }
                     Divider()
+                    if !link.isArchived { Button("Delete", role: .destructive) { model.delete(link) } }
                     Button(link.isArchived ? "Restore to library" : "Archive") { model.archive(link) }
                 } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 18).help("Link options")
             }.font(.system(size: 12)).foregroundStyle(Color.muted).opacity(hovered ? 1 : link.isFavorite ? 0.55 : 0.18)
@@ -243,6 +287,7 @@ struct LinkRow: View {
                 Button("Copy link") { model.copy(link) }
                 Button("Share by email…") { model.share(link) }
                 Button("Edit note & tags…") { model.selectedID = link.id }
+                if !link.isArchived { Button("Delete", role: .destructive) { model.delete(link) } }
                 Button(link.isArchived ? "Restore to library" : "Archive") { model.archive(link) }
             }
     }

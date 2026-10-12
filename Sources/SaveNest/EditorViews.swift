@@ -130,12 +130,16 @@ struct TabSelectionView: View {
 
 struct SettingsView: View {
     @ObservedObject var model: AppModel
+    var onBack: () -> Void = {}
     var body: some View {
         ScrollView { VStack(alignment: .leading, spacing: 26) {
+            Button { onBack() } label: { Label("Library", systemImage: "chevron.left") }
+                .buttonStyle(.plain).font(.system(size: 12, weight: .medium)).foregroundStyle(Color.muted)
             sheetHeading("Make yourself at home.", subtitle: "A few small things, just how you like them.")
             Button("Account & subscription…") { model.showAccount?() }.buttonStyle(QuietButton())
             VStack(alignment: .leading, spacing: 15) {
                 fieldLabel("KEYBOARD SHORTCUTS")
+                Button("Show the quick tour") { model.showOnboarding() }.buttonStyle(.link).font(.system(size: 11))
                 ForEach(CaptureAction.allCases) { action in
                     VStack(alignment: .leading, spacing: 5) {
                         HStack {
@@ -173,7 +177,7 @@ struct SettingsView: View {
             }
             VStack(alignment: .leading, spacing: 13) {
                 fieldLabel("YOUR LIBRARY")
-                Text("Swipe left to archive a link, or right for Email and Copy. A long left swipe archives immediately; Undo appears at the bottom. In Archive, swipe left to restore.").font(.system(size: 11)).foregroundStyle(Color.muted).lineSpacing(4)
+                Text("Swipe left to reveal Delete and Archive, or right for Email and Copy. A long left swipe archives immediately; Undo appears at the bottom. In Archive, swipe left to restore.").font(.system(size: 11)).foregroundStyle(Color.muted).lineSpacing(4)
                 Text("Archive all links is in the library menu. Empty archive is inside Archive and asks before deleting permanently.").font(.system(size: 11)).foregroundStyle(Color.muted).lineSpacing(4)
                 HStack {
                     Button("Export backup…") { model.exportLibrary() }.buttonStyle(QuietButton())
@@ -183,7 +187,9 @@ struct SettingsView: View {
                 }
             }
             HStack { NestMark().frame(width: 20, height: 20); Text("SaveNest " + (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "development")); Spacer(); Text("A small app for a clearer mind.") }.font(.system(size: 10)).foregroundStyle(Color.muted)
-        }.padding(32) }.frame(width: 610, height: 680).background(Color.paper).foregroundStyle(Color.ink).preferredColorScheme(.light)
+        }.padding(32) }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Color.paper).foregroundStyle(Color.ink).preferredColorScheme(.light)
     }
 }
 func fieldLabel(_ text: String) -> some View { Text(text).font(.system(size: 9, weight: .semibold)).tracking(1.3).foregroundStyle(Color.muted) }

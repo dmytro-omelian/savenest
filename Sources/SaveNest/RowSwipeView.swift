@@ -77,6 +77,9 @@ struct SwipeableLink<Content: View>: View {
                 }
                 Spacer(minLength: 0)
                 if offset < 0 {
+                    if !link.isArchived {
+                        action("Delete", icon: "trash", color: .muted) { delete() }
+                    }
                     action(link.isArchived ? "Restore" : "Archive", icon: link.isArchived ? "arrow.uturn.backward" : "archivebox", color: .sage) { archive() }
                 }
             }
@@ -91,7 +94,7 @@ struct SwipeableLink<Content: View>: View {
             origin = nil
             switch RowSwipe.finish(offset: offset, cancelled: cancelled) {
             case .archive: archive()
-            case .archiveButton: withAnimation(.easeOut(duration: 0.18)) { offset = -78 }
+            case .archiveButton: withAnimation(.easeOut(duration: 0.18)) { offset = link.isArchived ? -72 : -144 }
             case .shareButtons: withAnimation(.easeOut(duration: 0.18)) { offset = 144 }
             case .closed: close()
             }
@@ -99,6 +102,7 @@ struct SwipeableLink<Content: View>: View {
         .onChange(of: model.swipedLinkID) { _, id in if id != link.id { close() } }
         .onChange(of: model.query) { _, _ in close() }
         .onChange(of: model.filter) { _, _ in close() }
+        .accessibilityAction(named: Text("Delete")) { delete() }
         .accessibilityAction(named: Text(link.isArchived ? "Restore" : "Archive")) { archive() }
         .accessibilityAction(named: Text("Share by email")) { model.share(link) }
     }
@@ -110,4 +114,5 @@ struct SwipeableLink<Content: View>: View {
     }
     private func close() { origin = nil; withAnimation(.easeOut(duration: 0.18)) { offset = 0 } }
     private func archive() { close(); withAnimation(.easeOut(duration: 0.18)) { _ = model.archive(link) } }
+    private func delete() { close(); withAnimation(.easeOut(duration: 0.18)) { model.delete(link) } }
 }

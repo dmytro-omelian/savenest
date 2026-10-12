@@ -67,7 +67,7 @@ Press **⌘⇧O** from any app to open only the compact tab switcher, without ac
 - Links are grouped by local calendar date, newest first.
 - Website icons replace letter tiles when available. New captures retain the page’s icon URL; older links use the site favicon or public homepage icon. Requests use no browser cookies or favicon proxy, run in the background (six at a time), and cache locally for seven days. Missing icons keep the letter fallback.
 - Click a title to open it in your default browser; click a note preview to edit it. Row actions become more prominent on hover.
-- Swipe left with two fingers to reveal Archive (Restore inside Archive); a long left swipe performs it. Swipe right for Email and Copy. Escape closes revealed actions. All actions are also in the row menu.
+- Swipe left with two fingers to reveal Delete and Archive (Restore inside Archive); a long left swipe performs Archive. Swipe right for Email and Copy. Escape closes revealed actions. All actions are also in the row menu.
 - Email opens a preview with an editable subject and an optional note (off by default). Include a note starts from your saved note without changing it. Open Mail prepares a draft; you choose the recipient and send it.
 - “Archive all links…” in the library menu clears the active library after confirmation. Both individual and bulk archive/restore offer Undo in the footer for the last action.
 - “Empty archive…” lives inside Archive. It confirms the count before permanently deleting archived links, notes, and tags. Links outside Archive, restored links, and links added after the confirmation opened are kept.
@@ -75,7 +75,7 @@ Press **⌘⇧O** from any app to open only the compact tab switcher, without ac
 - Click a tag pill or use the Tags menu to filter. All, Favorites, Notes, and Archive keep the library in one compact view.
 - Add tags with Return or commas, reuse suggestions, and click a tag to remove it. Saving includes any unfinished tag input; **⌘Return** saves the editor.
 - Existing libraries and backups without tags load automatically; notes and saved dates are preserved.
-- A row’s **…** menu has copy, note/tag editing, and archive.
+- A row’s **…** menu has copy, note/tag editing, Delete, and archive.
 - The top **…** menu opens Account or Settings. Archived links can be restored.
 - Duplicates are skipped without overwriting existing notes or dates.
 - Internal browser pages, local files, and URLs with embedded credentials are skipped.
