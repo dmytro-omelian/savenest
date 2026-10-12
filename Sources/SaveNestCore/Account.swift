@@ -60,6 +60,15 @@ public enum AccountAccess {
               NativeCallback.isNonce(code), NativeCallback.isNonce(expectedState) else { return nil }
         return code
     }
+
+    /// Referral links are deliberately small and contain no email address or account data.
+    public static func referralCode(_ url: URL) -> String? {
+        guard let values = NativeCallback.parameters(url, host: "invite", path: "/redeem", keys: ["code"]),
+              let raw = values["code"] else { return nil }
+        let code = raw.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard code.range(of: #"^SN[A-Z0-9]{8}$"#, options: .regularExpression) != nil else { return nil }
+        return code
+    }
 }
 
 public struct PendingEmailSignIn: Codable, Equatable {

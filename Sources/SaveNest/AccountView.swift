@@ -63,6 +63,28 @@ struct AccountView: View {
                         plan("Monthly", amount: "\(monthlyAmount) / month", offer: "Everything in SaveNest", renewal: "One simple plan. Cancel anytime.", value: "monthly")
                     }
                 }
+                if account.referral?.eligible == true, let referral = account.referral {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Invite a friend").font(.system(size: 15, weight: .medium))
+                        Text("They pay $1 for their first month. After that payment succeeds, your next renewal is $1 too.")
+                            .font(.system(size: 12)).foregroundStyle(Color.muted).fixedSize(horizontal: false, vertical: true)
+                        HStack(spacing: 10) {
+                            TextField("Friend’s email", text: $account.inviteEmail)
+                                .textFieldStyle(.roundedBorder).textContentType(.emailAddress)
+                                .onSubmit { Task { await account.sendReferralInvite() } }
+                            Button("Send invite") { Task { await account.sendReferralInvite() } }
+                                .buttonStyle(QuietButton()).disabled(account.isSendingInvite || referral.remaining == 0)
+                            if account.isSendingInvite { ProgressView().controlSize(.small) }
+                        }
+                        Text("\(referral.remaining) of 5 invitations available in this rolling 30-day period · \(referral.successful) successful · \(referral.queued) reward\(referral.queued == 1 ? "" : "s") queued")
+                            .font(.system(size: 11)).foregroundStyle(Color.muted)
+                        if let referralMessage = account.referralMessage {
+                            Text(referralMessage).font(.system(size: 11)).foregroundStyle(Color.muted).fixedSize(horizontal: false, vertical: true)
+                        }
+                        Text("SaveNest stores the invited email and reward status only to deliver the invitation and run the referral program.")
+                            .font(.system(size: 10)).foregroundStyle(Color.muted).fixedSize(horizontal: false, vertical: true)
+                    }.padding(20).frame(maxWidth: .infinity, alignment: .leading).nestSurface()
+                }
                 if let message = account.message {
                     Text(message).font(.system(size: 12)).foregroundStyle(Color.muted).fixedSize(horizontal: false, vertical: true)
                 }
@@ -87,13 +109,22 @@ struct AccountView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color.paper).foregroundStyle(Color.ink).nestAppearance()
+        .task(id: account.account?.user.id) { await account.loadReferrals() }
     }
     private func plan(_ title: String, amount: String, offer: String, renewal: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 9) {
             HStack { Text(title).font(.system(size: 15, weight: .medium)); Spacer(); Text(amount).font(.system(size: 13)) }
             Text(offer).font(.system(size: 13, weight: .medium)).foregroundStyle(Color.sage)
             Text(renewal).font(.system(size: 11)).foregroundStyle(Color.muted)
-            Button("Subscribe for \(monthlyAmount) ↗") { Task { await account.checkout(plan: value) } }.buttonStyle(QuietButton()).disabled(account.isBusy)
+            if account.pendingReferralCode != nil {
+                Text("Friend invite applied · first month $1").font(.system(size: 11, weight: .medium)).foregroundStyle(Color.sage)
+                HStack(spacing: 12) {
+                    Button("Subscribe for $1 first month ↗") { Task { await account.checkout(plan: value) } }.buttonStyle(QuietButton()).disabled(account.isBusy)
+                    Button("Remove invite") { account.clearReferralCode() }.buttonStyle(.link)
+                }
+            } else {
+                Button("Subscribe for \(monthlyAmount) ↗") { Task { await account.checkout(plan: value) } }.buttonStyle(QuietButton()).disabled(account.isBusy)
+            }
             Text("Have a promotion code? Enter it in Stripe Checkout.")
                 .font(.system(size: 11)).foregroundStyle(Color.muted)
         }.padding(20).frame(maxWidth: .infinity, alignment: .leading).nestSurface()

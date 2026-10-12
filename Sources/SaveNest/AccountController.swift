@@ -26,6 +26,13 @@ private final class AccountTransport: NSObject, URLSessionTaskDelegate {
 
 @MainActor
 final class AccountController: NSObject, ObservableObject {
+    struct ReferralSummary: Decodable {
+        let eligible: Bool
+        let successful: Int
+        let queued: Int
+        let sent: Int
+        let remaining: Int
+    }
     enum SignInStage { case idle, sending, waiting, verifying }
     enum BillingStage { case idle, preparing, waiting, checking }
     @Published private(set) var account: SaveNestAccount?
@@ -35,9 +42,14 @@ final class AccountController: NSObject, ObservableObject {
     @Published private(set) var hasLogin = false
     @Published private(set) var verifiedAt: Date?
     @Published private(set) var subscriptionUnavailable = false
+    @Published private(set) var referral: ReferralSummary?
+    @Published private(set) var isSendingInvite = false
+    @Published private(set) var referralMessage: String?
+    @Published private(set) var pendingReferralCode = UserDefaults.standard.string(forKey: "savenest.pending-referral-code")
     @Published private(set) var resendAvailableAt: Date?
     @Published var signInEmail = ""
     @Published var signInName = ""
+    @Published var inviteEmail = ""
     @Published var message: String?
     var presentationWindow: (() -> NSWindow?)?
     var bringAccountForward: (() -> Void)?
@@ -89,6 +101,8 @@ final class AccountController: NSObject, ObservableObject {
     private struct AccountResponse: Decodable { let account: SaveNestAccount }
     private struct ExchangeResponse: Decodable { let accessToken: String; let account: SaveNestAccount }
     private struct URLResponse: Decodable { let url: URL }
+    private struct ReferralResponse: Decodable { let email: String; let referral: ReferralSummary }
+    private struct ReferralSummaryResponse: Decodable { let referral: ReferralSummary }
     private struct OKResponse: Decodable { let ok: Bool }
     private struct ErrorResponse: Decodable { let error: String? }
     private func request<T: Decodable>(_ path: String, method: String = "GET", body: [String: String]? = nil, token: String? = nil, query: [String: String] = [:], timeout: TimeInterval = 15) async throws -> T {
@@ -148,7 +162,42 @@ final class AccountController: NSObject, ObservableObject {
             message = "We couldn’t check your subscription right now. Try Check access again. Your saved library is still available."
         } else {
             account = value; verifiedAt = Date(); subscriptionUnavailable = false; message = nil
+            if value.subscription.active, pendingReferralCode != nil { clearReferralCode() }
         }
+        Task { await loadReferrals() }
+    }
+
+    func loadReferrals() async {
+        guard let token = accessToken, account != nil else { referral = nil; return }
+        do {
+            let result: ReferralSummaryResponse = try await request("api/referrals", token: token)
+            guard accessToken == token else { return }
+            referral = result.referral
+        } catch {
+            guard accessToken == token else { return }
+            referral = nil
+        }
+    }
+
+    func sendReferralInvite() async {
+        guard !isSendingInvite, let token = accessToken,
+              let email = NativeCallback.normalizedEmail(inviteEmail) else {
+            referralMessage = "Enter your friend’s email address."
+            return
+        }
+        isSendingInvite = true; referralMessage = nil
+        defer { isSendingInvite = false }
+        do {
+            let result: ReferralResponse = try await request("api/referrals", method: "POST", body: ["email": email], token: token)
+            guard accessToken == token else { return }
+            referral = result.referral; inviteEmail = ""
+            referralMessage = "Invitation sent to \(result.email). Your $1 renewal unlocks after they complete their $1 payment."
+        } catch { if accessToken == token { referralMessage = friendly(error) } }
+    }
+
+    func clearReferralCode() {
+        pendingReferralCode = nil
+        UserDefaults.standard.removeObject(forKey: "savenest.pending-referral-code")
     }
     func authorize() async -> Bool {
         if canSave { return true }
@@ -202,6 +251,16 @@ final class AccountController: NSObject, ObservableObject {
         do { try AccountKeychain.cancelSignIn(id: id) } catch { message = friendly(error) }
     }
     func handleIncomingURL(_ url: URL) {
+        if let code = AccountAccess.referralCode(url) {
+            if hasExistingSubscription {
+                message = "Invite pricing is for a new subscription. You can still invite friends from your Account."
+            } else {
+                pendingReferralCode = code
+                UserDefaults.standard.set(code, forKey: "savenest.pending-referral-code")
+                message = "Friend invite ready. Sign in with the invited email, then subscribe for $1 for your first month."
+            }
+            showAccount(); return
+        }
         guard url.scheme == "savenest", ["auth", "billing"].contains(url.host ?? "") else { return }
         Task { @MainActor in
             await synchronizeLogin(refreshExisting: false)
@@ -289,6 +348,7 @@ final class AccountController: NSObject, ObservableObject {
             try AccountKeychain.saveBilling(attempt); pendingBilling = attempt; created = attempt
             var body = ["client": "mac", "state": attempt.state]
             if let plan { body["plan"] = plan }
+            if flow == .checkout, let pendingReferralCode { body["referralCode"] = pendingReferralCode }
             let result: URLResponse = try await request(flow == .checkout ? "api/billing/checkout" : "api/billing/portal", method: "POST", body: body, token: token)
             guard sessionGeneration == generation, accessToken == token, pendingBilling?.id == attempt.id else { return }
             guard try AccountKeychain.billing()?.id == attempt.id else { pendingBilling = nil; billingStage = .idle; message = "This billing request was cancelled in another copy of SaveNest."; return }
@@ -372,7 +432,7 @@ final class AccountController: NSObject, ObservableObject {
         }
     }
     private func clearLocalLogin() {
-        sessionGeneration = UUID(); accessToken = nil; hasLogin = false; account = nil; verifiedAt = nil; subscriptionUnavailable = false
+        sessionGeneration = UUID(); accessToken = nil; hasLogin = false; account = nil; verifiedAt = nil; subscriptionUnavailable = false; referral = nil; referralMessage = nil
         refreshFlight?.task.cancel(); refreshFlight = nil; isRefreshing = false
         billingPollID = UUID(); billingPoll?.cancel(); billingPoll = nil; pendingBilling = nil; billingStage = .idle
         onChange?()

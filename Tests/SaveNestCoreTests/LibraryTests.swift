@@ -361,6 +361,17 @@ final class LibraryTests {
             "savenest://user@auth/callback?code=\(code)&state=\(state)"
         ] { XCTAssertNil(AccountAccess.callbackCode(URL(string: raw)!, expectedState: state), raw) }
     }
+    func testReferralCallbackAcceptsOnlyOneSafeCode() {
+        XCTAssertEqual(AccountAccess.referralCode(URL(string: "savenest://invite/redeem?code=snabc23456")!), "SNABC23456")
+        for raw in [
+            "https://invite/redeem?code=SNABC23456",
+            "savenest://evil/redeem?code=SNABC23456",
+            "savenest://invite/other?code=SNABC23456",
+            "savenest://invite/redeem?code=bad",
+            "savenest://invite/redeem?code=SNABC23456&code=SNABC23456",
+            "savenest://invite/redeem?code=SNABC23456#fragment"
+        ] { XCTAssertNil(AccountAccess.referralCode(URL(string: raw)!), raw) }
+    }
     func testPendingNativeCallbacksAreSingleUseAndBoundToStateAndAccount() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let state = String(repeating: "s", count: 43)
@@ -447,6 +458,7 @@ func XCTAssertThrowsError<T>(_ expression: @autoclosure () throws -> T) {
         tests.testSocialTitlesPreferContentAndHaveSpecificFallbacks()
         try tests.testSubscriptionRequiresFreshVerifiedPaidAccess()
         tests.testSignInCallbackRejectsForgedOrAmbiguousURLs()
+        tests.testReferralCallbackAcceptsOnlyOneSafeCode()
         tests.testPendingNativeCallbacksAreSingleUseAndBoundToStateAndAccount()
         tests.testCheckoutUsesExistingSubscriptionForPaymentRecovery()
         await tests.testBillingPollFindsDelayedPaymentWithoutCallback()
@@ -464,6 +476,6 @@ func XCTAssertThrowsError<T>(_ expression: @autoclosure () throws -> T) {
         tests.testImportanceLearningRequiresEvidenceAndHonorsCorrections()
         try tests.testImportanceMigrationAndBackup()
         try tests.testAnalyticsOptOutAndPayloadBoundary()
-        print("Passed 33 SaveNest checks")
+        print("Passed 34 SaveNest checks")
     }
 }
