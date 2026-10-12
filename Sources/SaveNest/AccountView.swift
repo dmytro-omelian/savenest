@@ -4,7 +4,7 @@ struct AccountView: View {
     @ObservedObject var account: AccountController
     var onBack: () -> Void = {}
     @State private var promoCode = ""
-    private var monthlyAmount: String { account.isSandbox ? "$1.99" : "$5" }
+    private var monthlyAmount: String { account.isSandbox ? "$1.99" : "$4.99" }
     private var normalizedPromo: String { promoCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() }
     var body: some View {
         ScrollView {
@@ -12,7 +12,7 @@ struct AccountView: View {
                 Button { onBack() } label: { Label("Library", systemImage: "chevron.left") }
                     .buttonStyle(.plain).font(.system(size: 12, weight: .medium)).foregroundStyle(Color.muted)
                 HStack(spacing: 10) { NestMark().frame(width: 30, height: 30); Text("savenest").font(.system(size: 23, weight: .semibold)).tracking(-0.8) }
-                sheetHeading(account.hasLogin ? "Your little corner." : "A home for your good finds.", subtitle: account.hasLogin ? "Your account and subscription." : "Sign in, subscribe for $5/month, and start saving.")
+                sheetHeading(account.hasLogin ? "Your little corner." : "A home for your good finds.", subtitle: account.hasLogin ? "Your account and subscription." : "Sign in, subscribe for $4.99/month, and start saving.")
                 if let details = account.account {
                     VStack(alignment: .leading, spacing: 7) {
                         Text(details.user.name.isEmpty ? "Your account" : details.user.name).font(.system(size: 16, weight: .medium))
@@ -99,8 +99,8 @@ struct AccountView: View {
                 TextField("Promo code (optional)", text: $promoCode).textFieldStyle(.roundedBorder).disabled(account.isBusy)
                 if normalizedPromo == "BETA" || normalizedPromo == "REAKTORX" {
                     Text(normalizedPromo == "BETA"
-                         ? "31 days free, then $2.50/month for 6 months, then $5/month. Cancel anytime. First-time subscribers only."
-                         : "$2.50/month for 12 months, then $5/month. Cancel anytime.")
+                         ? "31 days free, then 50% off $4.99/month for 6 months, then $4.99/month. Cancel anytime. First-time subscribers only."
+                         : "50% off $4.99/month for 12 months, then $4.99/month. Cancel anytime.")
                         .font(.system(size: 11)).foregroundStyle(Color.sage).fixedSize(horizontal: false, vertical: true)
                 }
             }
