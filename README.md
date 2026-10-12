@@ -21,7 +21,9 @@ Choose **SaveNest → Account**, enter your email in the app, and choose **Email
 
 Saving requires an active subscription:
 
-- **SaveNest:** $1.99/month. One plan includes every feature; cancel anytime.
+- **SaveNest:** $5/month for new live subscriptions. One plan includes every feature; cancel anytime. Existing $1.99 subscribers keep their price. The owner-only sandbox keeps its $1.99 test price.
+
+Enter a promo code in Account before opening Stripe. **BETA** gives first-time subscribers 31 days free, then $2.50/month for six monthly payments, then $5/month. **REAKTORX** gives $2.50/month for twelve months, then $5/month. Offers do not stack. Checkout shows the full terms and collects a payment method for renewal; cancel from Account → Manage billing. Free-trial access is verified by the server and expires at the trial end unless paid access succeeds.
 
 Plan selection stays in the Account screen. SaveNest opens Stripe only for the secure card/payment step, then the website returns to the app. SaveNest checks server-verified access every five seconds for up to 15 minutes after opening Stripe, even without a browser callback. Checks resume when you return to the app or reopen Account, including after a restart. Returning to the app requests fresh server access instead of the two-minute cache. A valid checkout return also retries for up to one minute if payment confirmation is delayed. **Stop waiting** cancels local checks without changing a payment; **Refresh access** remains available as a fallback and forces a server check. A **Sandbox · test payments only** label identifies a Stripe sandbox account. Use card `4242 4242 4242 4242`, any future expiration, and any CVC; no real payment is taken in sandbox.
 

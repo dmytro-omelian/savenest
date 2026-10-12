@@ -3,23 +3,26 @@ import SwiftUI
 struct AccountView: View {
     @ObservedObject var account: AccountController
     var onBack: () -> Void = {}
+    @State private var promoCode = ""
+    private var monthlyAmount: String { account.isSandbox ? "$1.99" : "$5" }
+    private var normalizedPromo: String { promoCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() }
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 Button { onBack() } label: { Label("Library", systemImage: "chevron.left") }
                     .buttonStyle(.plain).font(.system(size: 12, weight: .medium)).foregroundStyle(Color.muted)
                 HStack(spacing: 10) { NestMark().frame(width: 30, height: 30); Text("savenest").font(.system(size: 23, weight: .semibold)).tracking(-0.8) }
-                sheetHeading(account.hasLogin ? "Your little corner." : "A home for your good finds.", subtitle: account.hasLogin ? "Your account and subscription." : "Sign in, subscribe for $1.99/month, and start saving.")
+                sheetHeading(account.hasLogin ? "Your little corner." : "A home for your good finds.", subtitle: account.hasLogin ? "Your account and subscription." : "Sign in, subscribe for $5/month, and start saving.")
                 if let details = account.account {
                     VStack(alignment: .leading, spacing: 7) {
                         Text(details.user.name.isEmpty ? "Your account" : details.user.name).font(.system(size: 16, weight: .medium))
                         Text(details.user.email).font(.system(size: 12)).foregroundStyle(Color.muted).textSelection(.enabled)
                         if account.canSave {
-                            Label("Subscription active", systemImage: "checkmark.circle.fill").font(.system(size: 12)).foregroundStyle(Color.sage).padding(.top, 4)
+                            Label(details.subscription.status == "trialing" ? "Free trial active" : "Subscription active", systemImage: "checkmark.circle.fill").font(.system(size: 12)).foregroundStyle(Color.sage).padding(.top, 4)
                             if let date = details.subscription.renewsAt {
                                 Text(details.subscription.cancelAtPeriodEnd
                                      ? "Your service will end on \(Date(timeIntervalSince1970: date).formatted(date: .long, time: .omitted))."
-                                     : "Current period ends \(Date(timeIntervalSince1970: date).formatted(date: .abbreviated, time: .omitted))")
+                                     : "\(details.subscription.status == "trialing" ? "Trial ends" : "Current period ends") \(Date(timeIntervalSince1970: date).formatted(date: .abbreviated, time: .omitted))")
                                     .font(.system(size: 11)).foregroundStyle(Color.muted)
                             }
                         } else {
@@ -59,7 +62,7 @@ struct AccountView: View {
                     }
                 } else if account.canChoosePlan {
                     VStack(spacing: 12) {
-                        plan("Monthly", amount: "$1.99 / month", offer: "Everything in SaveNest", renewal: "One simple plan. Cancel anytime.", value: "monthly")
+                        plan("Monthly", amount: "\(monthlyAmount) / month", offer: "Everything in SaveNest", renewal: "One simple plan. Cancel anytime.", value: "monthly")
                     }
                 }
                 if let message = account.message {
@@ -92,7 +95,16 @@ struct AccountView: View {
             HStack { Text(title).font(.system(size: 15, weight: .medium)); Spacer(); Text(amount).font(.system(size: 13)) }
             Text(offer).font(.system(size: 13, weight: .medium)).foregroundStyle(Color.sage)
             Text(renewal).font(.system(size: 11)).foregroundStyle(Color.muted)
-            Button("Subscribe for $1.99 ↗") { Task { await account.checkout(plan: value) } }.buttonStyle(QuietButton()).disabled(account.isBusy)
+            if !account.isSandbox {
+                TextField("Promo code (optional)", text: $promoCode).textFieldStyle(.roundedBorder).disabled(account.isBusy)
+                if normalizedPromo == "BETA" || normalizedPromo == "REAKTORX" {
+                    Text(normalizedPromo == "BETA"
+                         ? "31 days free, then $2.50/month for 6 months, then $5/month. Cancel anytime. First-time subscribers only."
+                         : "$2.50/month for 12 months, then $5/month. Cancel anytime.")
+                        .font(.system(size: 11)).foregroundStyle(Color.sage).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Button(normalizedPromo.isEmpty || account.isSandbox ? "Subscribe for \(monthlyAmount) ↗" : "Continue with promo ↗") { Task { await account.checkout(plan: value, promoCode: account.isSandbox ? "" : promoCode) } }.buttonStyle(QuietButton()).disabled(account.isBusy)
         }.padding(20).frame(maxWidth: .infinity, alignment: .leading).nestSurface()
     }
 }
