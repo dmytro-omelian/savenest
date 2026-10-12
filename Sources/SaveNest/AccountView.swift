@@ -3,9 +3,7 @@ import SwiftUI
 struct AccountView: View {
     @ObservedObject var account: AccountController
     var onBack: () -> Void = {}
-    @State private var promoCode = ""
     private var monthlyAmount: String { account.isSandbox ? "$1.99" : "$4.99" }
-    private var normalizedPromo: String { promoCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() }
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
@@ -95,16 +93,9 @@ struct AccountView: View {
             HStack { Text(title).font(.system(size: 15, weight: .medium)); Spacer(); Text(amount).font(.system(size: 13)) }
             Text(offer).font(.system(size: 13, weight: .medium)).foregroundStyle(Color.sage)
             Text(renewal).font(.system(size: 11)).foregroundStyle(Color.muted)
-            if !account.isSandbox {
-                TextField("Promo code (optional)", text: $promoCode).textFieldStyle(.roundedBorder).disabled(account.isBusy)
-                if normalizedPromo == "BETA" || normalizedPromo == "REAKTORX" {
-                    Text(normalizedPromo == "BETA"
-                         ? "31 days free, then 50% off $4.99/month for 6 months, then $4.99/month. Cancel anytime. First-time subscribers only."
-                         : "50% off $4.99/month for 12 months, then $4.99/month. Cancel anytime.")
-                        .font(.system(size: 11)).foregroundStyle(Color.sage).fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            Button(normalizedPromo.isEmpty || account.isSandbox ? "Subscribe for \(monthlyAmount) ↗" : "Continue with promo ↗") { Task { await account.checkout(plan: value, promoCode: account.isSandbox ? "" : promoCode) } }.buttonStyle(QuietButton()).disabled(account.isBusy)
+            Button("Subscribe for \(monthlyAmount) ↗") { Task { await account.checkout(plan: value) } }.buttonStyle(QuietButton()).disabled(account.isBusy)
+            Text("Have a promotion code? Enter it in Stripe Checkout.")
+                .font(.system(size: 11)).foregroundStyle(Color.muted)
         }.padding(20).frame(maxWidth: .infinity, alignment: .leading).nestSurface()
     }
 }

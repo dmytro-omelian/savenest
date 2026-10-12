@@ -5,6 +5,7 @@ struct LibraryView: View {
     @ObservedObject var model: AppModel
     @FocusState private var searchFocused: Bool
     @State private var now = Date()
+    @AppStorage("hasSeenUsageNotice") private var hasSeenUsageNotice = false
     @State private var bulkAction: BulkAction?
     private struct BulkAction: Identifiable {
         let id = UUID()
@@ -26,6 +27,15 @@ struct LibraryView: View {
             toolbar
             if !model.onboardingCompleted { onboardingBanner }
             if !model.isPreview { AccountBanner(account: model.account, openAccount: { model.showAccount?() }) }
+            if !hasSeenUsageNotice && !model.isPreview {
+                HStack(alignment: .top, spacing: 10) {
+                    Text("New: anonymous usage counts help improve SaveNest. Your links and notes stay on this Mac.")
+                        .font(.system(size: 11)).foregroundStyle(Color.muted)
+                    Button("Settings") { hasSeenUsageNotice = true; model.showSettings?() }.buttonStyle(.link)
+                    Button("Turn off") { model.analyticsEnabled = false; hasSeenUsageNotice = true }.buttonStyle(.link)
+                    Button { hasSeenUsageNotice = true } label: { Image(systemName: "xmark") }.buttonStyle(.plain).accessibilityLabel("Dismiss usage notice")
+                }.padding(14).background(Color.sage.opacity(0.08)).padding(.horizontal, 26).padding(.top, 10)
+            }
             filters
             if model.filter == "Archive" && !model.archivedIDs.isEmpty {
                 HStack {
@@ -277,6 +287,10 @@ struct LinkRow: View {
                     Button("Copy link") { model.copy(link) }
                     Button("Share by email…") { model.share(link) }
                     Button("Edit title, note & tags…") { model.selectedID = link.id }
+                    Divider()
+                    Button("Mark Important") { model.labelImportance(link, .important) }
+                    Button("Mark Not needed") { model.labelImportance(link, .notNeeded) }
+                    if link.importance != nil { Button("Reset importance") { model.labelImportance(link, nil) } }
                     Divider()
                     if !link.isArchived { Button("Delete", role: .destructive) { model.delete(link) } }
                     Button(link.isArchived ? "Restore to library" : "Archive") { model.archive(link) }

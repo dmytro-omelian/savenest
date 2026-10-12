@@ -51,15 +51,6 @@ struct CapturedTabs {
     let links: [SavedLink]
     let closeTarget: CapturedTabTarget?
 }
-struct CapturedTabTarget: Codable {
-    let windowID: Int
-    let index: Int
-    let tabID: Int?
-    let url: String
-    let safari: Bool
-    var browserID: String = ""
-    var processID: Int32 = 0
-}
 
 final class BrowserCapture {
     private var observation: NSObjectProtocol?
@@ -151,7 +142,7 @@ final class BrowserCapture {
                         try {
                             const index = \(browser.safari ? "uniqueSafariTabIndex(w, result.url)" : "-1");
                             if (!\(browser.safari ? "true" : "false") || index >= 0) {
-                                result.closeTarget = {windowID:w.id(), index:index, tabID:\(browser.safari ? "null" : "tab.id()"), url:result.url, safari:\(browser.safari ? "true" : "false"), browserID:'\(browser.id)', processID:\(processID)};
+                                result.closeTarget = {windowID:String(w.id()), index:index, tabID:\(browser.safari ? "null" : "String(tab.id())"), url:result.url, safari:\(browser.safari ? "true" : "false"), browserID:'\(browser.id)', processID:\(processID)};
                             }
                         } catch (_) { /* Save still works when stable tab identity is unavailable. */ }
                     }

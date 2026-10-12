@@ -2,7 +2,7 @@
 
 A small native Mac app for saving browser tabs. Press **⌘⇧K**, keep browsing, and find your links later in a quiet list grouped by **Today**, **Yesterday**, and older dates.
 
-Built with SwiftUI and AppKit. Email sign-in and Stripe subscriptions are managed by savenest.app; links and notes remain local. No analytics, browser extension, or third-party Swift packages. Rounded library cards and a floating action rail take their visual direction from [One](https://getone.one). Settings → Appearance offers the original cream and sage palette or the charcoal and emerald palette; black is the default. The choice applies immediately throughout the app and is remembered across launches.
+Built with SwiftUI and AppKit. Email sign-in and Stripe subscriptions are managed by savenest.app; links and notes remain local. Optional anonymous usage counts help improve the app; there is no browser extension. Sparkle handles signed in-app updates. Rounded library cards and a floating action rail take their visual direction from [One](https://getone.one). Settings → Appearance offers the original cream and sage palette or the charcoal and emerald palette; black is the default. The choice applies immediately throughout the app and is remembered across launches.
 
 ## Run
 
@@ -13,7 +13,7 @@ Requires macOS 14 or later and Apple's Swift command-line tools (Swift 5.9+).
 open build/SaveNest.app
 ```
 
-The script creates an ad-hoc-signed app for the current Mac architecture. Move `build/SaveNest.app` to Applications if you want to keep it installed. Launch the app at least once before using its shortcut. Closing the library leaves SaveNest running in the menu bar; Quit stops capture.
+The script creates an ad-hoc-signed app for the current Mac architecture. Move `build/SaveNest.app` to Applications if you want to keep it installed. Public builds launched from Downloads, a disk image, or another folder offer to move themselves to Applications and reopen there; development and Preview builds do not. Launch the app at least once before using its shortcut. Closing the library leaves SaveNest running in the menu bar; Quit stops capture.
 
 ## Account and beta pricing
 
@@ -23,7 +23,7 @@ Saving requires an active subscription:
 
 - **SaveNest:** $4.99/month for new live subscriptions. One plan includes every feature; cancel anytime. Existing $1.99 and $5 subscribers keep their price. The owner-only sandbox keeps its $1.99 test price.
 
-Enter a promo code in Account before opening Stripe. **BETA** gives first-time subscribers 31 days free, then 50% off $4.99/month for six monthly payments, then $4.99/month. **REAKTORX** gives 50% off $4.99/month for twelve months, then $4.99/month. Offers do not stack. Checkout shows the full terms and collects a payment method for renewal; cancel from Account → Manage billing. Free-trial access is verified by the server and expires at the trial end unless paid access succeeds.
+Enter active promotion codes on the hosted Stripe Checkout page. Stripe shows the discount and its terms before payment. SaveNest does not accept or pre-apply codes. Existing server-confirmed BETA trials keep their recorded access, while new redemptions use the promotion terms configured in Stripe. Cancel from Account → Manage billing.
 
 Plan selection stays in the Account screen. SaveNest opens Stripe only for the secure card/payment step, then the website returns to the app. SaveNest checks server-verified access every five seconds for up to 15 minutes after opening Stripe, even without a browser callback. Checks resume when you return to the app or reopen Account, including after a restart. Returning to the app requests fresh server access instead of the two-minute cache. A valid checkout return also retries for up to one minute if payment confirmation is delayed. **Stop waiting** cancels local checks without changing a payment; **Refresh access** remains available as a fallback and forces a server check. A **Sandbox · test payments only** label identifies a Stripe sandbox account. Use card `4242 4242 4242 4242`, any future expiration, and any CVC; no real payment is taken in sandbox.
 
@@ -60,9 +60,21 @@ The foreground supported browser takes priority. From SaveNest or another non-br
 
 Direct capture adapters: Safari, Safari Technology Preview, Chrome, Chrome Beta, Brave, Edge, Arc, Vivaldi, Chromium, and Opera. These rely on each browser's scripting support; not all adapters have been exercised on this machine. Firefox doesn't expose the same tab scripting interface: copy a URL and use **+ → Paste URL** or **⌘N**.
 
+## Clipboard, importance, and usage counts
+
+Settings → Clipboard → **Offer to save copied links** is off by default. Enable it to offer Save or Add note when you copy a single HTTP(S) URL. Monitoring starts with the next clipboard change; it ignores previously copied contents, prose, credentials in URLs, private/transient/generated pasteboard types, and links already saved (including Archive). The offer lasts 12 seconds and never takes keyboard focus. It saves the URL shown by that offer even if you copy something else. Turning monitoring off dismisses any offer. **Save copied link** in File or the menu bar works without continuous monitoring. Normal verified subscription access still applies.
+
+The new **Review importance** rail button opens a local feedback queue. Mark links **Important** or **Not needed**; show reviewed links to correct/reset a choice, or archive a Not needed link with Undo. Feedback is stored in `library.json` and backups, including archived training examples. Notes and favorites suggest Important. Otherwise the learner requires at least three distinct labeled URLs from the same website or overlapping tags, with at least 80% agreement. Sparse/conflicting evidence asks for a decision. This is an explainable local heuristic, not a cloud AI model. It never closes tabs, archives, or deletes automatically. Settings can disable suggestions or reset labels while keeping links and annotations. Opening an older backup without labels remains supported.
+
+Settings also offers an optional shortcut preset: **⇧⌘K** saves, **⇧⌘N** adds a note, **⇧⌘T** adds tags. Existing bindings are retained until selected; a registration conflict rolls back the entire preset. These combinations may overlap browser actions, so every binding remains configurable.
+
+**Share anonymous usage counts** is enabled by default, announced by a dismissible library banner, and can be turned off in Settings or directly from the banner. Every 60 seconds, the app sends only fixed event names/counts to `https://savenest.app/api/usage`. It includes no account token, cookie, persistent installation/device identifier, URLs, titles, note text, tag names, clipboard contents, or importance choices. A fresh random batch ID prevents counting one upload twice. Turning reporting off clears pending counts, cancels in-flight requests, and discards the session. Events remain in memory only; offline, failed, short sessions, and shutdown activity may be missed. Reporting does not block saving. Counts already sent cannot be associated with an individual for deletion.
+
+The service aggregates by UTC day, retaining approximately 90 days of counts and seven days of upload receipts. Ordinary network information (including IP address) reaches the hosting provider but is not stored in the usage tables. These are best-effort action totals, not unique-user, retention, or revenue metrics. In Settings → Anonymous usage, the verified owner account `dima@omelabs.org` can load the last 30 days; server authorization independently enforces that exact identity. Preview mode sends no analytics and does not monitor the clipboard.
+
 ## Open-tab search
 
-Press **⌘⇧O** from any app to open only the compact tab switcher, without activating SaveNest or raising the library. Clicking outside the switcher dismisses it. Search words across tab titles, URLs, and browser names; title matches rank first. **↑/↓** selects, **Return** switches to the existing tab, **⌘1–9** jumps directly, and **Escape** closes the panel. The shortcut is configurable in Settings. The list refreshes on opening and can be refreshed manually; cached results remain searchable during refresh. Safari and the supported Chromium adapters expose tabs in their open windows. Hidden Safari tab groups, Firefox, and embedded browser views are not included. Tab titles and URLs remain in memory only.
+Press **⌘⇧O** from any app to open only the compact tab switcher, without activating SaveNest or raising the library. Clicking outside the switcher dismisses it. Search words across tab titles, URLs, and browser names; title matches rank first. **↑/↓** selects, **Return** switches to the existing tab, **⌘1–9** jumps directly, and **Escape** closes the panel. The shortcut is configurable in Settings. The list refreshes on opening and can be refreshed manually; cached results remain searchable during refresh. Safari and the supported Chromium adapters expose tabs in their open windows. Hidden Safari tab groups, Firefox, and embedded browser views are not included. All matching tabs from every scriptable Safari and Chrome window, including windows in different profiles, appear in one scrollable list, with ⌘1–9 shortcuts for the first nine. Use the bookmark button beside a result to save that specific tab without switching browsers; it stays open. Tab titles and URLs remain in memory unless you explicitly save a result.
 
 ## Library
 
@@ -98,9 +110,10 @@ Browsers may block this unless **Allow JavaScript from Apple Events** is enabled
 swift run SaveNestChecks
 node scripts/check-metadata.mjs
 node scripts/check-tab-close.mjs
+node scripts/check-browser-tabs.mjs
 ```
 
-Twenty Swift checks cover library persistence, dates, browser selection, legacy migration, tags, keyword ranking, tag counts, annotation updates, title fallback, paid-access expiry, subscription payment recovery, delayed automatic access checks, polling timeout/cancellation, and forged, mismatched, or replayed native callbacks. Ten tab-close checks cover successful close, changed or closed windows/tabs, duplicate Safari URLs, and Chromium tab identity after reordering. Four additional Node checks execute the actual page reader against DOM fixtures, including unrelated posts and feed pages. The runner works with Command Line Tools alone; it does not require Xcode's XCTest framework.
+Thirty-three Swift checks cover library persistence, dates, browser selection, legacy migration, tags, keyword ranking, tag counts, annotation updates, title fallback, paid-access expiry, subscription payment recovery, delayed automatic access checks, polling timeout/cancellation, and forged, mismatched, or replayed native callbacks. Eighteen tab-close checks cover successful close, changed or closed windows/tabs, duplicate Safari URLs, and Chromium tab identity after reordering. Nine browser-tab checks cover mixed browser identity types, multiple profile windows with identical URLs, complete result lists, tab switching after reordering, navigation guards, and permission errors. Six additional Node checks execute the actual page reader against DOM fixtures, including unrelated posts and feed pages. The runner works with Command Line Tools alone; it does not require Xcode's XCTest framework.
 
 Run `./scripts/preview-app.sh` to open a separate **SaveNest Preview** app with an in-memory sample library. The preview has its own app identity, does not register account callbacks, and does not load or write the saved library or register global shortcuts. The fixture is also available by running `.build/debug/SaveNest --ui-preview` directly from a terminal.
 
@@ -109,3 +122,49 @@ Run `./scripts/preview-app.sh` to open a separate **SaveNest Preview** app with 
 This repository produces a local development build. Public downloads need a Developer ID signature and Apple notarization. The build script accepts `SIGNING_IDENTITY` for your Developer ID certificate. It embeds the Automation entitlement and browser-access usage description. No developer credentials are included.
 
 The companion website is in `../savenest` and provides email sign-in, account management, Stripe checkout, and downloads. Bookmark sync is not included: the library remains on the Mac, and an account does not upload existing links.
+
+### In-app updates
+
+Release builds use Sparkle 2.10.0. **Check for Updates…** is available in the SaveNest application menu, the menu bar icon, and **Settings → App updates**, alongside the version/build and **Automatically check for updates** switch. Sparkle asks for permission for automatic checks on the second launch; it remembers the user's choice and checks daily when enabled. Downloads and installation require user action. Sparkle's system profiling is disabled. Updates do not require sign-in or an active subscription.
+
+The feed is `https://savenest.app/downloads/appcast.xml`. Sparkle verifies update archive signatures before installation, replaces the application, and relaunches it. Library data remains in Application Support. Development builds from `build-app.sh`, ad-hoc release previews, and SaveNest Preview disable updates; the preview never creates a Sparkle updater. The build scripts embed and sign the framework and each helper, preserving their entitlements and symlinks.
+
+Version 0.9.3 (build 26) introduces the updater. Users on 0.9.2 or earlier need one manual installation. Publishing a feed alone cannot add an updater to their old app.
+
+### Publish a new version
+
+1. Bump the version and monotonically increasing build number (the build number determines update order):
+
+   ```sh
+   ./scripts/set-version.sh 0.9.5 28
+   ```
+
+2. Add release notes at `Resources/ReleaseNotes/0.9.5.html`. Use an HTML fragment, such as `<h2>What's new</h2><ul><li>…</li></ul>`; Sparkle embeds it in the feed.
+3. Build the universal, Developer ID signed, notarized update:
+
+   ```sh
+   SIGNING_IDENTITY='Developer ID Application: Dmytro Omelian (444G89GLZD)' \
+   NOTARY_PROFILE='savenest-notary' \
+   ./scripts/package-release.sh
+   ```
+
+   The script validates the notarization profile and Sparkle signing key first, signs the framework and helpers, notarizes and staples the app, then generates the signed archive entries in `build/releases/updates/appcast.xml`. ZIPs, release notes, and `release.json` live in that same directory. Existing versioned ZIPs are never overwritten. Only notarized releases enter the update feed. Ad-hoc packaging (`ALLOW_ADHOC=1`) writes separately to `build/releases/previews` and never generates a public feed.
+
+4. Copy the versioned ZIP, release notes, `appcast.xml`, and `release.json` to the companion website's `public/downloads/`. Its `/download/macos` redirect reads the manifest's filename automatically. Publish via the website's deployment workflow. Upload archives before the feed if deployment is not atomic. Keep existing published archives available. Serve the feed over HTTPS with a short cache lifetime or revalidation. The generated files are local artifacts until this step completes.
+5. Check both the website download and **Check for Updates…** from an older updater-enabled release. Verify download, install, relaunch, and preserved library/settings. Test on an installed app outside the build directory; users on the current build should see “up to date.” Do not downgrade the production feed to test.
+
+Before publishing, check the package and its update metadata with `python3 scripts/check-update-package.py build/releases/updates/SaveNest-0.9.5-macOS.zip` (use the version being released). This uses a temporary feed and verifies both valid signatures and rejection of a modified archive. It also works on an ad-hoc preview ZIP; it never publishes the test feed or installs the app.
+
+### Signing key and a new release Mac
+
+The Sparkle Ed25519 private key is stored in the login Keychain under account `app.savenest.mac`; only its public key is committed as `SUPublicEDKey` in `Resources/Info.plist`. Back up that private key securely before migrating or erasing this Mac. It is separate from the Apple Developer ID certificate and notarization credentials.
+
+After `swift package resolve`, Sparkle's `generate_keys`, `sign_update`, and `generate_appcast` tools are in `.build/artifacts/sparkle/Sparkle/bin/`. To inspect the existing public key:
+
+```sh
+.build/artifacts/sparkle/Sparkle/bin/generate_keys --account app.savenest.mac -p
+```
+
+Use Sparkle's documented key export/import process to transfer the existing private key to another release machine. Never commit private key exports. Do not generate a replacement key for each release: the packaging script requires the Keychain public key to match the app's committed public key. `SPARKLE_KEY_ACCOUNT` can select another Keychain account containing the same key. Apple notarization profiles are created separately with `xcrun notarytool store-credentials`.
+
+See [Sparkle setup](https://sparkle-project.org/documentation/) and [publishing updates](https://sparkle-project.org/documentation/publishing/) for details.

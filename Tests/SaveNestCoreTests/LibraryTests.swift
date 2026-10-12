@@ -2,6 +2,82 @@ import Foundation
 import SaveNestCore
 
 final class LibraryTests {
+    func testBrowserTabPayloadsDecodeAndSaveTogether() throws {
+        // Safari numeric IDs are normalized by the reader; Chrome natively returns text IDs.
+        let payload = Data(#"[{"browserID":"com.apple.Safari","browserName":"Safari","windowID":"42","tabID":"","index":1,"title":"Safari page","url":"https://example.com/safari"},{"browserID":"com.google.Chrome","browserName":"Chrome","windowID":"42","tabID":"1084952245","index":1,"title":"Chrome page","url":"https://example.com/chrome"}]"#.utf8)
+        let tabs = try JSONDecoder().decode([OpenBrowserTab].self, from: payload)
+        XCTAssertEqual(tabs.count, 2)
+        XCTAssertEqual(Set(tabs.map(\.id)).count, 2)
+        XCTAssertEqual(tabs[1].tabID, "1084952245")
+        var library = Library()
+        let links = tabs.map { SavedLink(url: $0.url, title: $0.title, browser: $0.browserName) }
+        XCTAssertEqual(library.insert(links), 2)
+        XCTAssertEqual(library.insert(links), 0)
+        XCTAssertEqual(Set(library.links.map(\.browser)), Set(["Safari", "Chrome"]))
+        let targetJSON = Data(#"{"windowID":"42","tabID":"1084952245","index":-1,"url":"https://example.com/chrome","safari":false,"browserID":"com.google.Chrome","processID":123}"#.utf8)
+        let target = try JSONDecoder().decode(CapturedTabTarget.self, from: targetJSON)
+        XCTAssertEqual(target.tabID, tabs[1].tabID)
+        try XCTAssertEqual(try JSONDecoder().decode(CapturedTabTarget.self, from: JSONEncoder().encode(target)).windowID, "42")
+    }
+
+    func testClipboardRequiresSingleSafeURL() {
+        XCTAssertNotNil(ClipboardLink.parse("  https://example.com/path?q=one#two\n"))
+        for text in ["Read https://example.com", "https://one.test\nhttps://two.test", "file:///tmp/private", "javascript:alert(1)", "https://user:pass@example.com", "", "https://example.com/a b", String(repeating: "x", count: 9000)] {
+            XCTAssertNil(ClipboardLink.parse(text), text)
+        }
+    }
+    func testImportanceLearningRequiresEvidenceAndHonorsCorrections() {
+        let candidate = SavedLink(url: "https://example.com/candidate", title: "Candidate")
+        var examples = (0..<3).map { value -> SavedLink in
+            var link = SavedLink(url: "https://example.com/\(value)", title: "Example")
+            link.importance = .notNeeded; return link
+        }
+        XCTAssertNil(LinkLearning.suggest(candidate, examples: Array(examples.prefix(2))).importance)
+        XCTAssertEqual(LinkLearning.suggest(candidate, examples: examples).importance, .notNeeded)
+        examples[0].importance = .important
+        XCTAssertNil(LinkLearning.suggest(candidate, examples: examples).importance)
+        var annotated = candidate; annotated.note = "Kill a stuck development port"
+        XCTAssertEqual(LinkLearning.suggest(annotated, examples: examples).importance, .important)
+        annotated.importance = .notNeeded
+        XCTAssertEqual(LinkLearning.suggest(annotated, examples: examples).importance, .notNeeded)
+        examples = examples.map { var link = $0; link.importance = .important; link.tags = ["Tools"]; return link }
+        var elsewhere = SavedLink(url: "https://other.test/tool", title: "Tool"); elsewhere.tags = ["tools"]
+        XCTAssertEqual(LinkLearning.suggest(elsewhere, examples: examples).importance, .important)
+        elsewhere.tags = []
+        XCTAssertNil(LinkLearning.suggest(elsewhere, examples: examples).importance)
+        XCTAssertNil(LinkLearning.suggest(candidate, examples: Array(repeating: examples[0], count: 3)).importance)
+    }
+    func testImportanceMigrationAndBackup() throws {
+        var link = SavedLink(url: "https://example.com", title: "Reference")
+        var object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(link)) as! [String: Any]
+        object.removeValue(forKey: "importance")
+        let legacy = try JSONDecoder().decode(SavedLink.self, from: JSONSerialization.data(withJSONObject: object))
+        XCTAssertNil(legacy.importance)
+        link.importance = .important
+        try XCTAssertEqual(try JSONDecoder().decode(SavedLink.self, from: JSONEncoder().encode(link)), link)
+        var library = Library(); library.links = [link]
+        var annotation = link; annotation.importance = nil; annotation.note = "New note"
+        library.saveAnnotated(annotation)
+        XCTAssertEqual(library.links[0].importance, .important)
+    }
+    func testAnalyticsOptOutAndPayloadBoundary() throws {
+        var accumulator = UsageAccumulator()
+        accumulator.record(.linkOpened)
+        XCTAssertNil(accumulator.drain())
+        accumulator.configure(enabled: true)
+        accumulator.record(.linksSaved, count: 3)
+        accumulator.configure(enabled: false)
+        accumulator.configure(enabled: true)
+        XCTAssertNil(accumulator.drain()) // Opt-out discarded unsent events.
+        accumulator.record(.linksSaved, count: Int.max)
+        accumulator.record(.linkCopied, count: -1)
+        let batch = accumulator.drain()!
+        XCTAssertEqual(batch.counts, ["links_saved": 1000])
+        XCTAssertNil(accumulator.drain()) // Never report one event twice.
+        let object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(batch)) as! [String: Any]
+        XCTAssertEqual(Set(object.keys), Set(["batchID", "counts"]))
+        XCTAssertFalse(UsageBatch(counts: [.appOpened: 1]).batchID == batch.batchID)
+    }
     func testLegacyReadStateIsIgnored() throws {
         let link = SavedLink(url: "https://example.com/read", title: "Read")
         let data = try JSONEncoder().encode(link)
@@ -355,6 +431,7 @@ func XCTAssertThrowsError<T>(_ expression: @autoclosure () throws -> T) {
 @main enum Checks {
     @MainActor static func main() async throws {
         let tests = LibraryTests()
+        try tests.testBrowserTabPayloadsDecodeAndSaveTogether()
         tests.testCaptureDeduplicatesWithinBatchAndAcrossSaves()
         tests.testMeaningfulQueriesAndFragmentsArePreserved()
         tests.testRejectsUnsafeAndNonWebURLs()
@@ -383,6 +460,10 @@ func XCTAssertThrowsError<T>(_ expression: @autoclosure () throws -> T) {
         tests.testSwipeLocksDirectionAndRequiresIntentionalDistance()
         tests.testSiteIconURLsAndHTMLFallback()
         try tests.testIconMetadataSurvivesLibraryRoundTripAndLegacySaves()
-        print("Passed 28 SaveNest checks")
+        tests.testClipboardRequiresSingleSafeURL()
+        tests.testImportanceLearningRequiresEvidenceAndHonorsCorrections()
+        try tests.testImportanceMigrationAndBackup()
+        try tests.testAnalyticsOptOutAndPayloadBoundary()
+        print("Passed 33 SaveNest checks")
     }
 }

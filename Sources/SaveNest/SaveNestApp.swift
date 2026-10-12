@@ -29,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.appearance = AppAppearance.saved.nativeAppearance
+        if pendingURLs.isEmpty && ApplicationMover.offerMoveIfNeeded() { return }
         model = AppModel()
         model.showTabSearch = { [weak self] in self?.openTabSearch() }
         model.tabSearch.close = { [weak self] in self?.tabSearchPanel?.orderOut(nil) }
@@ -42,16 +43,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         model.showTabSelection = { [weak self] draft in self?.openTabSelection(draft) }
         model.closeTabSelection = { [weak self] in self?.closeTabSelection() }
         model.showToast = { [weak self] message in self?.presentToast(message) }
+        model.dismissClipboardNotice = { [weak self] in
+            guard self?.model.toast?.clipboardURL != nil else { return }
+            self?.toastPanel?.orderOut(nil); self?.model.toast = nil
+        }
         let root = AppRootView(model: model)
         libraryWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 750, height: 680), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
         libraryWindow.title = model.isPreview ? "SaveNest Preview — Sample library" : "SaveNest"; libraryWindow.titleVisibility = .hidden
         libraryWindow.titlebarAppearsTransparent = true; libraryWindow.isReleasedWhenClosed = false
         libraryWindow.backgroundColor = NSColor(Color.paper)
-        libraryWindow.contentView = NSHostingView(rootView: root)
+        let libraryContent = NSHostingView(rootView: root)
+        // Navigation must not resize the window to a scroll view's entire content.
+        libraryContent.sizingOptions = []
+        libraryWindow.contentView = libraryContent
         libraryWindow.minSize = NSSize(width: 640, height: 520)
         if !model.isPreview { libraryWindow.setFrameAutosaveName("SaveNest.MinimalLibrary") }
         libraryWindow.center()
         setupMenus(); setupStatusItem(); openLibrary()
+        model.updater.start()
         let launchURLs = pendingURLs
         pendingURLs.removeAll()
         for url in launchURLs { model.account.handleIncomingURL(url) }
@@ -98,6 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc private func captureSelected() { model.capture(action: .selected) }
     @objc private func captureNote() { model.capture(action: .note) }
     @objc private func captureTags() { model.capture(action: .tags) }
+    @objc private func saveClipboard() { model.saveCurrentClipboard() }
     private func openCaptureEditor(_ draft: CaptureDraft) {
         if editorDraftID == draft.id, let captureEditor {
             captureEditor.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); return
@@ -154,23 +164,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         menu.addItem(item("Search open tabs…", #selector(openTabSearch)))
         menu.addItem(.separator())
         menu.addItem(item("Save current tab", #selector(captureTab)))
+        menu.addItem(item("Save copied link", #selector(saveClipboard)))
         menu.addItem(item("Save with a note…", #selector(captureNote)))
         menu.addItem(item("Save with tags…", #selector(captureTags)))
         menu.addItem(item("Save selected tabs…", #selector(captureSelected)))
         menu.addItem(item("Save all tabs in this window", #selector(captureWindow)))
         menu.addItem(item("Add a link…", #selector(addLink)))
         menu.addItem(.separator()); menu.addItem(item("Account…", #selector(openAccount))); menu.addItem(item("Settings…", #selector(openSettings)))
+        menu.addItem(model.updater.menuItem())
         menu.addItem(NSMenuItem(title: "Quit SaveNest", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         statusItem.menu = menu
     }
     private func setupMenus() {
         let main = NSMenu()
         let app = NSMenu(); app.addItem(item("Account…", #selector(openAccount))); app.addItem(item("Settings…", #selector(openSettings), key: ",")); app.addItem(.separator())
+        app.addItem(model.updater.menuItem()); app.addItem(.separator())
         app.addItem(NSMenuItem(title: "Hide SaveNest", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h"))
         app.addItem(NSMenuItem(title: "Quit SaveNest", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         let appRoot = NSMenuItem(); appRoot.submenu = app; main.addItem(appRoot)
         let file = NSMenu(title: "File")
         file.addItem(item("Search Open Tabs…", #selector(openTabSearch)))
+        file.addItem(item("Save Copied Link", #selector(saveClipboard)))
         file.addItem(item("Add Link…", #selector(addLink), key: "n")); file.addItem(item("Open Library", #selector(openLibrary), key: "0"))
         file.addItem(.separator()); file.addItem(item("Save Current Browser Tab", #selector(captureTab))); file.addItem(item("Save with a Note…", #selector(captureNote))); file.addItem(item("Save with Tags…", #selector(captureTags))); file.addItem(item("Save Selected Tabs…", #selector(captureSelected))); file.addItem(item("Save Browser Window", #selector(captureWindow)))
         file.addItem(.separator()); file.addItem(item("Import Backup…", #selector(importLibrary))); file.addItem(item("Export Backup…", #selector(exportLibrary)))
@@ -196,6 +210,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")!)
         }, openAccount: { [weak self, weak panel] in
             panel?.orderOut(nil); self?.openAccount()
+        }, saveClipboard: { [weak self, weak panel] url, withNote in
+            panel?.orderOut(nil); self?.model.saveClipboard(url, withNote: withNote)
         }))
         panel.contentView = content
         let size = content.fittingSize

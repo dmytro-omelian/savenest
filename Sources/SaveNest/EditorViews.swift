@@ -132,16 +132,49 @@ struct SettingsView: View {
     @ObservedObject var model: AppModel
     @AppStorage(AppAppearance.preferenceKey) private var appearance = AppAppearance.black.rawValue
     @State private var archiveIDs: Set<UUID>?
+    @State private var confirmResetLearning = false
     var onBack: () -> Void = {}
     var body: some View {
         ScrollView { VStack(alignment: .leading, spacing: 26) {
             Button { onBack() } label: { Label("Library", systemImage: "chevron.left") }
                 .buttonStyle(.plain).font(.system(size: 12, weight: .medium)).foregroundStyle(Color.muted)
             sheetHeading("Make yourself at home.", subtitle: "A few small things, just how you like them.")
+            if let error = model.error { Text(error).font(.system(size: 11)).foregroundStyle(.red) }
             appearancePicker
+            AppUpdateSettingsView(updater: model.updater)
+            VStack(alignment: .leading, spacing: 12) {
+                fieldLabel("CLIPBOARD")
+                Toggle("Offer to save copied links", isOn: $model.clipboardEnabled)
+                Text("When enabled, SaveNest checks new clipboard items for a single web link and offers Save or Add note. It skips links already saved and items marked private. Clipboard contents stay on this Mac. You can also choose Save copied link from the menu bar anytime.")
+                    .font(.system(size: 11)).foregroundStyle(Color.muted).fixedSize(horizontal: false, vertical: true)
+                Button("Preview clipboard offer") { model.notify(CaptureNotice(title: "Save copied link?", message: "example.com", clipboardURL: URL(string: "https://example.com/clipboard-preview")!)) }
+                    .buttonStyle(.link).font(.system(size: 11))
+            }.padding(20).nestSurface()
+            VStack(alignment: .leading, spacing: 12) {
+                fieldLabel("LEARN WHAT MATTERS")
+                Toggle("Suggest importance from my choices", isOn: $model.learningEnabled)
+                Text("Label links Important or Not needed in Review. Suggestions learn from links with similar websites and tags. Notes and favorites count as reasons to keep a link. Nothing is automatically archived or closed, and feedback never leaves your library.")
+                    .font(.system(size: 11)).foregroundStyle(Color.muted).fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Button("Review links") { model.section = .review }.buttonStyle(QuietButton())
+                    Button("Reset feedback…") { confirmResetLearning = true }.buttonStyle(.link)
+                }
+            }.padding(20).nestSurface()
+            VStack(alignment: .leading, spacing: 12) {
+                fieldLabel("ANONYMOUS USAGE")
+                Toggle("Share anonymous usage counts", isOn: $model.analyticsEnabled)
+                Text("Help improve SaveNest by sharing counts of app launches, saves, opens, copies, notes, tags, archives, and importance labels with savenest.app. No URLs, titles, notes, tags, clipboard text, account IDs, or device identifiers are included. Turning this off clears unsent counts and cancels reporting. Counts already sent cannot be tied back to you.")
+                    .font(.system(size: 11)).foregroundStyle(Color.muted).fixedSize(horizontal: false, vertical: true)
+                Text("The hosting service receives ordinary network information, such as your IP address, when a request arrives. The usage report stores only aggregate counts by day.")
+                    .font(.system(size: 11)).foregroundStyle(Color.muted).fixedSize(horizontal: false, vertical: true)
+                OwnerUsageView(account: model.account)
+            }.padding(20).nestSurface()
             Button("Account & subscription…") { model.showAccount?() }.buttonStyle(QuietButton())
             VStack(alignment: .leading, spacing: 15) {
                 fieldLabel("KEYBOARD SHORTCUTS")
+                Button("Use memorable preset: ⇧⌘K / ⇧⌘N / ⇧⌘T") { model.applyMemorableShortcuts() }
+                    .buttonStyle(.link).font(.system(size: 11))
+                Text("Same starting keys: K saves, N adds a note, T adds tags. Replaces these three shortcuts only. Some browsers use these combinations too.").font(.system(size: 11)).foregroundStyle(Color.muted)
                 Button("Show the quick tour") { model.showOnboarding() }.buttonStyle(.link).font(.system(size: 11))
                 ForEach(CaptureAction.allCases) { action in
                     VStack(alignment: .leading, spacing: 5) {
@@ -173,7 +206,7 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 10) {
                 fieldLabel("BROWSERS & PRIVACY")
                 Text("Capture directly from Safari and supported Chromium browsers, including Chrome, Arc, Brave, and Edge. macOS asks for Automation permission the first time you capture from each browser.").font(.system(size: 12)).lineSpacing(4)
-                Text("For Firefox or another app, copy its URL and choose Add link → Paste URL. Tabs stay open unless you turn on Close tab after saving for the Save link shortcut. SaveNest only reads tabs when you ask and stores links and notes locally.").font(.system(size: 11)).foregroundStyle(Color.muted).lineSpacing(4)
+                Text("For Firefox or another app, use Save copied link from the menu bar, or enable clipboard offers above. Tabs stay open unless you turn on Close tab after saving for the Save link shortcut. SaveNest only reads tabs when you ask and stores links and notes locally.").font(.system(size: 11)).foregroundStyle(Color.muted).lineSpacing(4)
                 Text("Website icons load directly from the site or its icon host and are cached on this Mac. SaveNest doesn’t use a third-party favicon service or send browser cookies.").font(.system(size: 11)).foregroundStyle(Color.muted).lineSpacing(4)
                 Text("Richer social titles use page metadata and post text when available. Your browser may require its ‘Allow JavaScript from Apple Events’ setting for this. Capture still works without it, using the tab title or a description based on the URL.").font(.system(size: 11)).foregroundStyle(Color.muted).lineSpacing(4)
                 Button("Open Automation Settings ↗") { NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")!) }.buttonStyle(.link).font(.system(size: 11))
@@ -195,6 +228,10 @@ struct SettingsView: View {
         }.padding(32) }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color.paper).foregroundStyle(Color.ink).nestAppearance()
+        .alert("Reset importance feedback?", isPresented: $confirmResetLearning) {
+            Button("Cancel", role: .cancel) {}
+            Button("Reset feedback", role: .destructive) { model.resetLearning() }
+        } message: { Text("This removes your Important and Not needed labels. Links, favorites, notes, and tags are kept.") }
         .alert(archiveIDs.map { "Archive \($0.count) \($0.count == 1 ? "link" : "links")?" } ?? "", isPresented: Binding(get: { archiveIDs != nil }, set: { if !$0 { archiveIDs = nil } }), presenting: archiveIDs) { ids in
             Button("Cancel", role: .cancel) { archiveIDs = nil }
             Button("Archive all") {

@@ -81,6 +81,11 @@ final class AccountController: NSObject, ObservableObject {
             if pendingBilling != nil { billingStage = .waiting }
         } catch { message = error.localizedDescription }
     }
+    var isUsageOwner: Bool { account?.user.email.lowercased() == "dima@omelabs.org" }
+    func loadUsageReport() async throws -> UsageReport {
+        guard let token = accessToken else { throw AccountFailure.signIn }
+        return try await request("api/usage/report", token: token)
+    }
     private struct AccountResponse: Decodable { let account: SaveNestAccount }
     private struct ExchangeResponse: Decodable { let accessToken: String; let account: SaveNestAccount }
     private struct URLResponse: Decodable { let url: URL }
@@ -269,12 +274,12 @@ final class AccountController: NSObject, ObservableObject {
             onChange?()
         } catch { if sessionGeneration == generation { message = friendly(error) } }
     }
-    func checkout(plan: String, promoCode: String = "") async {
+    func checkout(plan: String) async {
         guard plan == "monthly" else { return }
-        await startBilling(flow: .checkout, plan: plan, promoCode: promoCode)
+        await startBilling(flow: .checkout, plan: plan)
     }
     func openBilling() async { await startBilling(flow: .billing, plan: nil) }
-    private func startBilling(flow: NativeBillingFlow, plan: String?, promoCode: String = "") async {
+    private func startBilling(flow: NativeBillingFlow, plan: String?) async {
         guard billingStage == .idle, let token = accessToken, let userID = account?.user.id else { return }
         let generation = sessionGeneration
         billingStage = .preparing; message = nil
@@ -284,7 +289,6 @@ final class AccountController: NSObject, ObservableObject {
             try AccountKeychain.saveBilling(attempt); pendingBilling = attempt; created = attempt
             var body = ["client": "mac", "state": attempt.state]
             if let plan { body["plan"] = plan }
-            if flow == .checkout { body["promoCode"] = promoCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() }
             let result: URLResponse = try await request(flow == .checkout ? "api/billing/checkout" : "api/billing/portal", method: "POST", body: body, token: token)
             guard sessionGeneration == generation, accessToken == token, pendingBilling?.id == attempt.id else { return }
             guard try AccountKeychain.billing()?.id == attempt.id else { pendingBilling = nil; billingStage = .idle; message = "This billing request was cancelled in another copy of SaveNest."; return }

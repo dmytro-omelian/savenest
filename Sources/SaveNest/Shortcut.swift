@@ -21,6 +21,14 @@ enum CaptureAction: String, CaseIterable, Identifiable {
         return CaptureShortcut(keyCode: 40, modifiers: UInt32(modifiers), character: "K")
     }
     var hotkeyID: UInt32 { UInt32(Self.allCases.firstIndex(of: self)! + 1) }
+    var memorableShortcut: CaptureShortcut {
+        switch self {
+        case .quick: return .init(keyCode: 40, modifiers: UInt32(cmdKey | shiftKey), character: "K")
+        case .note: return .init(keyCode: 45, modifiers: UInt32(cmdKey | shiftKey), character: "N")
+        case .tags: return .init(keyCode: 17, modifiers: UInt32(cmdKey | shiftKey), character: "T")
+        default: return defaultShortcut
+        }
+    }
 }
 
 struct CaptureShortcut: Codable, Equatable {

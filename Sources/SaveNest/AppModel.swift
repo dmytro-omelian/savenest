@@ -16,7 +16,7 @@ struct TabSelectionDraft: Identifiable {
     init(links: [SavedLink]) { self.links = links; selected = Set(links.map(\.id)) }
 }
 
-enum AppSection { case library, tags, account, settings }
+enum AppSection { case library, tags, review, account, settings }
 
 enum AppLaunch {
     static var isPreview: Bool {
@@ -30,7 +30,29 @@ enum AppLaunch {
 
 @MainActor
 final class AppModel: ObservableObject {
+    let updater = AppUpdater()
     let account = AccountController()
+    let analytics = UsageAnalytics()
+    let clipboard = ClipboardMonitor()
+    @Published var clipboardEnabled = UserDefaults.standard.bool(forKey: "clipboardEnabled") {
+        didSet {
+            guard !isPreview else { return }
+            UserDefaults.standard.set(clipboardEnabled, forKey: "clipboardEnabled")
+            if clipboardEnabled { clipboard.start() } else { clipboard.stop(); dismissClipboardNotice?() }
+        }
+    }
+    @Published var analyticsEnabled = UserDefaults.standard.object(forKey: "analyticsEnabled") as? Bool ?? true {
+        didSet {
+            guard !isPreview else { return }
+            UserDefaults.standard.set(analyticsEnabled, forKey: "analyticsEnabled")
+            analytics.configure(enabled: analyticsEnabled)
+        }
+    }
+    @Published var learningEnabled = UserDefaults.standard.object(forKey: "learningEnabled") as? Bool ?? true {
+        didSet { if !isPreview { UserDefaults.standard.set(learningEnabled, forKey: "learningEnabled") } }
+    }
+    var dismissClipboardNotice: (() -> Void)?
+
     @Published private(set) var library = Library()
     @Published var closeAfterQuickSave = UserDefaults.standard.bool(forKey: "closeAfterQuickSave") {
         didSet { UserDefaults.standard.set(closeAfterQuickSave, forKey: "closeAfterQuickSave") }
@@ -87,6 +109,10 @@ final class AppModel: ObservableObject {
         shortcuts = Dictionary(uniqueKeysWithValues: CaptureAction.allCases.map { action in
             (action, stored[action.rawValue] ?? (action == .quick ? legacy : nil) ?? action.defaultShortcut)
         })
+        tabSearch.save = { [weak self] tab in
+            guard let self else { return false }
+            return await self.saveOpenTab(tab)
+        }
         #if DEBUG
         if isPreview {
             var design = SavedLink(url: "https://example.com/design", title: "The details that make a Mac app feel at home", browser: "Safari")
@@ -118,6 +144,10 @@ final class AppModel: ObservableObject {
             self.showOnboardingIfNeededForActiveAccount()
             self.objectWillChange.send()
         }
+        analytics.configure(enabled: analyticsEnabled)
+        analytics.record(.appOpened)
+        clipboard.onLink = { [weak self] url in self?.offerClipboard(url) }
+        if clipboardEnabled { clipboard.start() }
         hotkey.action = { [weak self] action in self?.capture(action: action) }
         for action in hotkey.register(shortcuts) { shortcutErrors[action] = "Already in use. Choose another shortcut." }
     }
@@ -221,6 +251,16 @@ final class AppModel: ObservableObject {
             }
         }
     }
+    private func saveOpenTab(_ tab: OpenBrowserTab) async -> Bool {
+        guard await authorizeSaving() else { return false }
+        guard let url = Library.validatedURL(tab.url) else {
+            notify(CaptureError.noTabs.notice)
+            return false
+        }
+        // Save the selected search result, irrespective of which browser has focus.
+        let link = SavedLink(url: url.absoluteString, title: LinkTitle.best(url: tab.url, browserTitle: tab.title, metadata: [:]), browser: tab.browserName)
+        return saveCaptured([link])
+    }
     @discardableResult private func saveCaptured(_ links: [SavedLink]) -> Bool {
         var next = library
         for link in links {
@@ -230,6 +270,7 @@ final class AppModel: ObservableObject {
         }
         let added = next.insert(links)
         guard commit(next, captureFeedback: true) else { return false }
+        analytics.record(.linksSaved, count: added)
         let title = added == 0 ? "Already saved" : (added == 1 ? "Tab saved" : "\(added) tabs saved")
         let message = added == 0 ? "Already in your library. No duplicate added." : "Ready in your library whenever you need it."
         notify(CaptureNotice(title: title, message: message))
@@ -247,6 +288,7 @@ final class AppModel: ObservableObject {
     }
     func cancelTabSelection() { tabSelection = nil; closeTabSelection?() }
     private func authorizeSaving() async -> Bool {
+        if isPreview { return true }
         guard await account.authorize() else {
             notify(CaptureNotice(title: account.hasLogin ? "Check your subscription" : "Sign in to save", message: account.message ?? "Open Account to start saving.", isError: true, opensAccount: true))
             return false
@@ -271,6 +313,9 @@ final class AppModel: ObservableObject {
         }
         let added = next.insert([link])
         guard commit(next) else { return false }
+        analytics.record(.linksSaved, count: added)
+        if !note.isEmpty { analytics.record(.noteSaved) }
+        if !tags.isEmpty { analytics.record(.tagsSaved) }
         notify(added == 0 ? "Already tucked away in your nest" : "Link saved")
         return true
     }
@@ -278,9 +323,25 @@ final class AppModel: ObservableObject {
         guard await authorizeSaving() else { return false }
         var next = library
         guard let index = next.links.firstIndex(where: { $0.id == link.id }) else { return false }
-        next.links[index] = link; return commit(next)
+        let previous = next.links[index]
+        // Editors may have been open while review/archive state changed.
+        next.links[index].title = link.title
+        next.links[index].note = link.note
+        next.links[index].tags = SavedLink.normalizedTags(link.tags)
+        next.links[index].isFavorite = link.isFavorite
+        guard commit(next) else { return false }
+        if previous.note != link.note { analytics.record(.noteSaved) }
+        if previous.tags != next.links[index].tags { analytics.record(.tagsSaved) }
+        return true
     }
-    func favorite(_ link: SavedLink) { var next = link; next.isFavorite.toggle(); Task { await update(next) } }
+    func favorite(_ link: SavedLink) {
+        Task { @MainActor in
+            guard await authorizeSaving() else { return }
+            var next = library
+            guard let index = next.links.firstIndex(where: { $0.id == link.id }) else { return }
+            next.links[index].isFavorite.toggle(); _ = commit(next)
+        }
+    }
     @discardableResult func archive(_ link: SavedLink) -> Bool {
         setArchived(!link.isArchived, ids: [link.id])
     }
@@ -290,6 +351,7 @@ final class AppModel: ObservableObject {
         guard !changed.isEmpty, commit(next) else { return false }
         selectedID = nil; swipedLinkID = nil
         archiveUndo = ArchiveUndo(ids: changed, archived: archived)
+        if archived { analytics.record(.linksArchived, count: changed.count) }
         return true
     }
     func undoArchive() {
@@ -339,6 +401,7 @@ final class AppModel: ObservableObject {
         if commit(next) { selectedID = nil; notify("Link deleted") }
     }
     func configureShortcut(_ value: CaptureShortcut?, for action: CaptureAction) {
+        if isPreview { if let value { shortcuts[action] = value }; return }
         guard let value else { restoreShortcuts(); return }
         if let duplicate = shortcuts.first(where: { $0.key != action && $0.value.keyCode == value.keyCode && $0.value.modifiers == value.modifiers }) {
             restoreShortcuts(); shortcutErrors[action] = "Already used by ‘\(duplicate.key.title)’."; return
@@ -367,8 +430,13 @@ final class AppModel: ObservableObject {
     @discardableResult func saveDraft(_ link: SavedLink) async -> Bool {
         guard await authorizeSaving() else { return false }
         var next = library
+        let isNew = !next.links.contains { Library.identity($0.url) == Library.identity(link.url) }
         guard next.saveAnnotated(link) else { notify(CaptureNotice(title: "Couldn’t save this link", message: "The web address is invalid.", isError: true)); return false }
         guard commit(next, captureFeedback: true) else { return false }
+        analytics.record(.linksSaved, count: isNew ? 1 : 0)
+        if link.browser == "Clipboard" && isNew { analytics.record(.clipboardSaved) }
+        if !link.note.isEmpty { analytics.record(.noteSaved) }
+        if !link.tags.isEmpty { analytics.record(.tagsSaved) }
         draft = nil; closeCaptureEditor?()
         notify(CaptureNotice(title: "Link saved", message: "Your note and tags are safely in your library."))
         return true
@@ -383,9 +451,9 @@ final class AppModel: ObservableObject {
     }
     func open(_ link: SavedLink) {
         guard let url = Library.validatedURL(link.url) else { error = "This link is not a valid web address."; return }
-        NSWorkspace.shared.open(url)
+        if NSWorkspace.shared.open(url) { analytics.record(.linkOpened) }
     }
-    func copy(_ link: SavedLink) { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(link.url, forType: .string); notify("Link copied") }
+    func copy(_ link: SavedLink) { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(link.url, forType: .string); analytics.record(.linkCopied); notify("Link copied") }
     func exportLibrary() {
         let panel = NSSavePanel(); panel.allowedContentTypes = [.json]; panel.nameFieldStringValue = "SaveNest-backup.json"
         guard panel.runModal() == .OK, let url = panel.url else { return }
@@ -405,9 +473,65 @@ final class AppModel: ObservableObject {
             let links = imported.links.map { link -> SavedLink in var result = link; result.id = UUID(); return result }
             let added = next.insert(links)
             for name in imported.collections where !next.collections.contains(name) && !["All links", "Favorites", "Archive"].contains(name) { next.collections.append(name) }
-            if commit(next) { notify("Imported \(added) links") }
+            if commit(next) { analytics.record(.linksSaved, count: added); notify("Imported \(added) links") }
         } catch { self.error = "This backup couldn’t be imported. \(error.localizedDescription)" }
         }
+    }
+    private func offerClipboard(_ url: URL) {
+        guard clipboardEnabled, !isCapturing, draft == nil, tabSelection == nil,
+              !library.links.contains(where: { Library.identity($0.url) == Library.identity(url.absoluteString) }) else { return }
+        notify(CaptureNotice(title: "Save copied link?", message: url.host ?? "Copied web link", clipboardURL: url))
+    }
+    func saveClipboard(_ url: URL, withNote: Bool = false) {
+        Task { @MainActor in
+            guard await authorizeSaving() else { return }
+            // The prompt owns its URL, even if the clipboard changes before it is clicked.
+            let link = SavedLink(url: url.absoluteString, title: LinkTitle.best(url: url.absoluteString, browserTitle: ""), browser: "Clipboard")
+            if withNote {
+                let existing = library.links.first { Library.identity($0.url) == Library.identity(link.url) }
+                beginDraft(existing ?? link, action: .note)
+            } else {
+                let isNew = !library.links.contains { Library.identity($0.url) == Library.identity(link.url) }
+                if saveCaptured([link]) && isNew { analytics.record(.clipboardSaved) }
+            }
+        }
+    }
+    func saveCurrentClipboard() {
+        guard let text = NSPasteboard.general.string(forType: .string), let url = ClipboardLink.parse(text) else {
+            notify(CaptureNotice(title: "No copied link", message: "Copy a complete http:// or https:// web address first.", isError: true)); return
+        }
+        saveClipboard(url)
+    }
+    func labelImportance(_ link: SavedLink, _ importance: LinkImportance?) {
+        Task { @MainActor in
+            guard await authorizeSaving() else { return }
+            var next = library
+            guard let index = next.links.firstIndex(where: { $0.id == link.id }) else { return }
+            next.links[index].importance = importance
+            if commit(next), importance != nil { analytics.record(.importanceLabeled) }
+        }
+    }
+    func resetLearning() {
+        var next = library
+        for index in next.links.indices { next.links[index].importance = nil }
+        if commit(next) { notify("Importance feedback reset") }
+    }
+    func applyMemorableShortcuts() {
+        let previous = shortcuts
+        var candidate = shortcuts
+        for action in [CaptureAction.quick, .note, .tags] { candidate[action] = action.memorableShortcut }
+        let all = Array(candidate.values)
+        guard Set(all.map { "\($0.keyCode):\($0.modifiers)" }).count == all.count else {
+            error = "The preset conflicts with another SaveNest shortcut. Change that shortcut first."; return
+        }
+        if isPreview { shortcuts = candidate; return }
+        let failed = hotkey.register(candidate)
+        guard failed.isEmpty else {
+            _ = hotkey.register(previous); error = "One of the preset shortcuts is unavailable. Your shortcuts are unchanged."; return
+        }
+        shortcuts = candidate; shortcutErrors = [:]
+        let saved = Dictionary(uniqueKeysWithValues: shortcuts.map { ($0.key.rawValue, $0.value) })
+        UserDefaults.standard.set(try? JSONEncoder().encode(saved), forKey: "captureShortcuts")
     }
     func revealLibrary() { NSWorkspace.shared.selectFile(file.url.path, inFileViewerRootedAtPath: file.url.deletingLastPathComponent().path) }
 }

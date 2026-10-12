@@ -7,7 +7,8 @@ struct CaptureNotice: Identifiable {
     var isError = false
     var opensAutomationSettings = false
     var opensAccount = false
-    var duration: TimeInterval { isError ? 8 : 3 }
+    var clipboardURL: URL? = nil
+    var duration: TimeInterval { clipboardURL != nil ? 12 : isError ? 8 : 3 }
 }
 
 struct CaptureNoticeView: View {
@@ -15,6 +16,7 @@ struct CaptureNoticeView: View {
     let dismiss: () -> Void
     let openSettings: () -> Void
     let openAccount: () -> Void
+    let saveClipboard: (URL, Bool) -> Void
     private var accent: Color { notice.isError ? .orange : .sage }
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -25,6 +27,12 @@ struct CaptureNoticeView: View {
                 Text(notice.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(Color.ink)
                 Text(notice.message).font(.system(size: 12)).foregroundStyle(Color.muted)
                     .lineSpacing(3).fixedSize(horizontal: false, vertical: true)
+                if let url = notice.clipboardURL {
+                    HStack(spacing: 16) {
+                        Button("Save") { saveClipboard(url, false) }
+                        Button("Add note…") { saveClipboard(url, true) }
+                    }.buttonStyle(.plain).font(.system(size: 12, weight: .semibold)).foregroundStyle(Color.sage).padding(.top, 4)
+                }
                 if notice.opensAccount {
                     Button("Open Account", action: openAccount).buttonStyle(.plain).font(.system(size: 11, weight: .medium)).foregroundStyle(Color.sage).padding(.top, 4)
                 }

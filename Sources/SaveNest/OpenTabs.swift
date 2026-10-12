@@ -2,18 +2,6 @@ import AppKit
 import SwiftUI
 import SaveNestCore
 
-struct OpenBrowserTab: Identifiable, Decodable {
-    let browserID: String
-    let browserName: String
-    let windowID: Int
-    let tabID: Int
-    let index: Int
-    let title: String
-    let url: String
-    var id: String { "\(browserID):\(windowID):\(tabID):\(index)" }
-    var domain: String { URL(string: url)?.host?.replacingOccurrences(of: "www.", with: "") ?? url }
-}
-
 enum BrowserScript {
     static func run(_ script: String) async throws -> Data {
         try await withCheckedThrowingContinuation { continuation in
@@ -52,12 +40,14 @@ final class TabSearchModel: ObservableObject {
     @Published private(set) var message: String?
     @Published var selectedIndex = 0
     var close: (() -> Void)?
+    var save: ((OpenBrowserTab) async -> Bool)?
+    @Published private(set) var saving = false
     private var generation = UUID()
     var results: [OpenBrowserTab] {
         tabs.compactMap { tab -> (OpenBrowserTab, Int)? in
             guard let score = LinkSearch.score(query: query, title: tab.title, url: tab.url, extra: tab.browserName) else { return nil }
             return (tab, score)
-        }.sorted { a, b in a.1 == b.1 ? a.0.title.localizedStandardCompare(b.0.title) == .orderedAscending : a.1 > b.1 }.prefix(9).map { $0.0 }
+        }.sorted { a, b in a.1 == b.1 ? a.0.title.localizedStandardCompare(b.0.title) == .orderedAscending : a.1 > b.1 }.map { $0.0 }
     }
     func refresh() {
         let current = UUID(); generation = current
@@ -70,19 +60,9 @@ final class TabSearchModel: ObservableObject {
                 guard generation == current else { return }
                 do {
                     let script = """
+                    \(BrowserTabScript.script)
                     function run() {
-                        const app = Application('\(browser.id)'), result = [];
-                        if (!app.running()) return '[]';
-                        app.windows().forEach(function(w) {
-                            try { const windowID = w.id(); w.tabs().forEach(function(t, i) {
-                                try {
-                                    const url = t.url() || '';
-                                    if (!/^https?:/i.test(url)) return;
-                                    result.push({browserID:'\(browser.id)', browserName:'\(browser.name)', windowID:windowID, tabID:\(browser.safari ? "0" : "t.id()"), index:i + 1, title:t.\(browser.safari ? "name" : "title")() || url, url:url});
-                                } catch (_) {}
-                            }); } catch (_) {}
-                        });
-                        return JSON.stringify(result);
+                        return JSON.stringify(readBrowserTabs(Application('\(browser.id)'), {id:'\(browser.id)', name:'\(browser.name)', safari:\(browser.safari)}));
                     }
                     """
                     let data = try await BrowserScript.run(script)
@@ -97,32 +77,32 @@ final class TabSearchModel: ObservableObject {
             else if browsers.isEmpty { message = "Open Safari or a supported Chromium browser to search its tabs." }
         }
     }
+    func saveTab(_ tab: OpenBrowserTab) {
+        guard !saving, let save else { return }
+        saving = true
+        Task {
+            defer { saving = false }
+            if await save(tab) { message = "Saved to your library." }
+            else { message = "Couldn’t save this tab. Check the SaveNest notification for details." }
+        }
+    }
     func move(_ offset: Int) { selectedIndex = max(0, min(results.count - 1, selectedIndex + offset)) }
     func activate(_ tab: OpenBrowserTab) {
         guard !switching, let browser = Browser.supported.first(where: { $0.id == tab.browserID }) else { return }
         switching = true
         // Encode page data as JSON literals; never interpolate a title or URL as executable code.
         let url = String(data: try! JSONEncoder().encode(tab.url), encoding: .utf8)!
+        let windowID = String(data: try! JSONEncoder().encode(tab.windowID), encoding: .utf8)!
+        let tabID = String(data: try! JSONEncoder().encode(tab.tabID), encoding: .utf8)!
         Task {
             defer { switching = false }
             do {
                 let script = """
+                \(BrowserTabScript.script)
                 function run() {
-                    const app = Application('\(browser.id)');
-                    if (!app.running()) return 'false';
-                    const windows = app.windows(), expectedURL = \(url);
-                    for (let i = 0; i < windows.length; i++) {
-                        const w = windows[i];
-                        if (w.id() !== \(tab.windowID)) continue;
-                        const tabs = w.tabs();
-                        let index = -1;
-                        \(browser.safari ? "if (tabs[\(tab.index - 1)] && tabs[\(tab.index - 1)].url() === expectedURL) index = \(tab.index - 1); else index = tabs.findIndex(t => t.url() === expectedURL);" : "index = tabs.findIndex(t => t.id() === \(tab.tabID) && t.url() === expectedURL);")
-                        if (index < 0) return 'false';
-                        \(browser.safari ? "w.currentTab = tabs[index];" : "w.activeTabIndex = index + 1;")
-                        try { w.minimized = false; } catch (_) {}
-                        w.index = 1; app.activate(); return 'true';
-                    }
-                    return 'false';
+                    return String(activateBrowserTab(Application('\(browser.id)'), {
+                        windowID:\(windowID), tabID:\(tabID), index:\(tab.index), url:\(url), safari:\(browser.safari)
+                    }));
                 }
                 """
                 let data = try await BrowserScript.run(script)
@@ -146,7 +126,7 @@ struct TabSearchView: View {
                     .onSubmit { if model.results.indices.contains(model.selectedIndex) { model.activate(model.results[model.selectedIndex]) } }
                     .onKeyPress(.upArrow) { model.move(-1); return .handled }
                     .onKeyPress(.downArrow) { model.move(1); return .handled }
-                if model.loading || model.switching { ProgressView().controlSize(.small) }
+                if model.loading || model.switching || model.saving { ProgressView().controlSize(.small) }
                 Button { model.query = ""; model.close?() } label: { Text("esc").font(.system(size: 10, design: .monospaced)) }.buttonStyle(QuietButton()).keyboardShortcut(.cancelAction)
             }.padding(.horizontal, 18).padding(.vertical, 16)
             Divider()
@@ -166,24 +146,35 @@ struct TabSearchView: View {
                     Text("Search by title, website, or browser.").font(.system(size: 12)).foregroundStyle(Color.muted)
                 }.frame(maxWidth: .infinity).padding(.vertical, 45)
             } else {
-                ScrollView {
-                    VStack(spacing: 3) {
-                        ForEach(Array(model.results.enumerated()), id: \.element.id) { index, tab in
-                            Button { model.activate(tab) } label: {
-                                HStack(spacing: 12) {
-                                    DomainIcon(domain: tab.domain, url: tab.url).scaleEffect(0.67).frame(width: 28, height: 28)
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(tab.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
-                                        Text("\(tab.domain) · \(tab.browserName)").font(.system(size: 11)).foregroundStyle(Color.muted).lineLimit(1)
-                                    }
-                                    Spacer()
-                                    Text("⌘\(index + 1)").font(.system(size: 11, design: .monospaced)).foregroundStyle(Color.muted)
-                                }.padding(.horizontal, 12).frame(height: 52).contentShape(Rectangle()).background(model.selectedIndex == index ? Color.sage.opacity(0.12) : Color.surface, in: RoundedRectangle(cornerRadius: 11))
-                                    .overlay(RoundedRectangle(cornerRadius: 11).strokeBorder(model.selectedIndex == index ? Color.sage.opacity(0.3) : .clear))
-                            }.buttonStyle(.plain).keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: .command)
-                        }
-                    }.padding(.horizontal, 10)
-                }.frame(height: CGFloat(model.results.count) * 55)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: 3) {
+                            ForEach(Array(model.results.enumerated()), id: \.element.id) { index, tab in
+                                HStack(spacing: 0) {
+                                    Button { model.activate(tab) } label: {
+                                        HStack(spacing: 12) {
+                                            DomainIcon(domain: tab.domain, url: tab.url).scaleEffect(0.67).frame(width: 28, height: 28)
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                Text(tab.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
+                                                Text("\(tab.domain) · \(tab.browserName)").font(.system(size: 11)).foregroundStyle(Color.muted).lineLimit(1)
+                                            }
+                                            Spacer()
+                                            if index < 9 { Text("⌘\(index + 1)").font(.system(size: 11, design: .monospaced)).foregroundStyle(Color.muted) }
+                                        }.padding(.horizontal, 12).frame(height: 52).contentShape(Rectangle()).background(model.selectedIndex == index ? Color.sage.opacity(0.12) : Color.surface, in: RoundedRectangle(cornerRadius: 11))
+                                            .overlay(RoundedRectangle(cornerRadius: 11).strokeBorder(model.selectedIndex == index ? Color.sage.opacity(0.3) : .clear))
+                                    }.buttonStyle(.plain)
+                                        .tabJumpShortcut(index: index)
+                                    Button { model.saveTab(tab) } label: {
+                                        Image(systemName: "bookmark.badge.plus").frame(width: 36, height: 44)
+                                    }.buttonStyle(.plain).disabled(model.saving)
+                                        .help("Save this tab").accessibilityLabel("Save \(tab.title)")
+                                }.id(index)
+                            }
+                        }.padding(.horizontal, 10)
+                    }.frame(height: CGFloat(min(model.results.count, 9)) * 55)
+                        .onChange(of: model.selectedIndex) { _, index in proxy.scrollTo(index) }
+                        .onChange(of: model.query) { _, _ in proxy.scrollTo(0, anchor: .top) }
+                }
             }
             Divider().padding(.top, 10)
             HStack { Text("↑ ↓ to select   ↵ to switch"); Spacer(); Text("⌘1–9 to jump directly") }
@@ -193,5 +184,12 @@ struct TabSearchView: View {
             .foregroundStyle(Color.ink).nestAppearance()
             .onAppear { focused = true }
             .onChange(of: model.query) { _, _ in model.selectedIndex = 0 }
+    }
+}
+
+private extension View {
+    @ViewBuilder func tabJumpShortcut(index: Int) -> some View {
+        if index < 9 { keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: .command) }
+        else { self }
     }
 }

@@ -56,4 +56,8 @@ for (const safari of [true, false]) {
   const calls = verify({safari,tabs:manyTabs,target:{index:999,tabID:999,url:manyTabs[999].url},expected:999});
   assert.deepEqual(calls, {bulkURLs:safari ? 1 : 0,bulkTabIDs:safari ? 0 : 1,bulkWindowIDs:1,individualURLs:1});
 }
+// Real Chromium scripting uses text IDs; Safari uses numeric IDs normalized on capture.
+verify({safari:false,windowID:'4',tabs:[{id:'1',url:'https://example.com/a'}],target:{windowID:'4',tabID:'1'},expected:'1'});
+verify({safari:false,windowID:'4',tabs:[{id:'2',url:'https://example.com/a'}],target:{windowID:'4',tabID:'1'},expected:null});
+verify({target:{windowID:'4'},expected:1});
 console.log(`Passed ${checks} tab-close safety and performance checks`);
