@@ -178,16 +178,19 @@ struct TabSearchView: View {
                                     }
                                     Spacer()
                                     Text("⌘\(index + 1)").font(.system(size: 11, design: .monospaced)).foregroundStyle(Color.muted)
-                                }.padding(.horizontal, 10).frame(height: 48).contentShape(Rectangle()).background(model.selectedIndex == index ? Color.sage.opacity(0.09) : .clear, in: RoundedRectangle(cornerRadius: 9))
+                                }.padding(.horizontal, 12).frame(height: 52).contentShape(Rectangle()).background(model.selectedIndex == index ? Color.sage.opacity(0.12) : Color.surface, in: RoundedRectangle(cornerRadius: 11))
+                                    .overlay(RoundedRectangle(cornerRadius: 11).strokeBorder(model.selectedIndex == index ? Color.sage.opacity(0.3) : .clear))
                             }.buttonStyle(.plain).keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: .command)
                         }
                     }.padding(.horizontal, 10)
-                }.frame(height: CGFloat(model.results.count) * 51)
+                }.frame(height: CGFloat(model.results.count) * 55)
             }
             Divider().padding(.top, 10)
             HStack { Text("↑ ↓ to select   ↵ to switch"); Spacer(); Text("⌘1–9 to jump directly") }
                 .font(.system(size: 10)).foregroundStyle(Color.muted).padding(.horizontal, 18).padding(.vertical, 11)
-        }.frame(width: 610).background(Color.paper, in: RoundedRectangle(cornerRadius: 14)).foregroundStyle(Color.ink).preferredColorScheme(.light)
+        }.frame(width: 610).background(Color.paper, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Color.line.opacity(0.8)))
+            .foregroundStyle(Color.ink).nestAppearance()
             .onAppear { focused = true }
             .onChange(of: model.query) { _, _ in model.selectedIndex = 0 }
     }

@@ -15,11 +15,12 @@ struct CaptureNoticeView: View {
     let dismiss: () -> Void
     let openSettings: () -> Void
     let openAccount: () -> Void
-    private var accent: Color { notice.isError ? Color(red: 0.65, green: 0.40, blue: 0.18) : .sage }
+    private var accent: Color { notice.isError ? .orange : .sage }
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: notice.isError ? "exclamationmark.circle" : "checkmark.circle")
-                .font(.system(size: 23, weight: .regular)).foregroundStyle(accent).padding(.top, 1)
+            Image(systemName: notice.isError ? "exclamationmark" : "checkmark")
+                .font(.system(size: 15, weight: .semibold)).foregroundStyle(accent)
+                .frame(width: 34, height: 34).background(accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 11))
             VStack(alignment: .leading, spacing: 6) {
                 Text(notice.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(Color.ink)
                 Text(notice.message).font(.system(size: 12)).foregroundStyle(Color.muted)
@@ -36,9 +37,9 @@ struct CaptureNoticeView: View {
                 .buttonStyle(.plain).accessibilityLabel("Dismiss notification")
         }
         .padding(18).frame(width: 370, alignment: .leading)
-        .background(Color.paper, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.line.opacity(0.8)))
-        .preferredColorScheme(.light)
+        .background(Color.paper.opacity(0.96), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Color.line.opacity(0.9)))
+        .nestAppearance()
         .accessibilityElement(children: .contain)
     }
 }

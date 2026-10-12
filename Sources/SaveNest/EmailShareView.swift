@@ -44,7 +44,7 @@ struct EmailShareView: View {
                 Button("Cancel") { dismiss() }.buttonStyle(.plain).keyboardShortcut(.cancelAction)
                 Button("Open Mail ↗") { openMail() }.buttonStyle(SageButton()).keyboardShortcut(.return, modifiers: .command)
             }
-        }.padding(28).frame(width: 460).background(Color.paper).foregroundStyle(Color.ink)
+        }.padding(28).frame(width: 460).background(Color.paper).foregroundStyle(Color.ink).nestAppearance()
     }
 
     private func openMail() {

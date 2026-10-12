@@ -17,7 +17,7 @@ struct OnboardingView: View {
         .frame(width: 590, height: 540)
         .background(Color.paper)
         .foregroundStyle(Color.ink)
-        .preferredColorScheme(.light)
+        .nestAppearance()
     }
 
     private var header: some View {
@@ -130,7 +130,7 @@ private struct OnboardingPage: View {
             Image(systemName: icon).font(.system(size: 26, weight: .medium)).foregroundStyle(Color.sage)
                 .frame(width: 72, height: 72).background(Color.sage.opacity(0.09), in: RoundedRectangle(cornerRadius: 22))
             Text(eyebrow).font(.system(size: 9, weight: .semibold)).tracking(1.4).foregroundStyle(Color.muted)
-            Text(title).font(.system(size: 30, weight: .regular, design: .serif)).tracking(-0.7).multilineTextAlignment(.center)
+            Text(title).font(.system(size: 28, weight: .semibold)).tracking(-0.7).multilineTextAlignment(.center)
             Text(bodyText).font(.system(size: 13)).foregroundStyle(Color.muted).multilineTextAlignment(.center).lineSpacing(4).frame(maxWidth: 405)
             Text(footnote).font(.system(size: 11, weight: .medium)).foregroundStyle(Color.sage).padding(.top, 4)
             Spacer()
@@ -149,7 +149,7 @@ private struct OnboardingPageHeading: View {
             Image(systemName: icon).font(.system(size: 19, weight: .medium)).foregroundStyle(Color.sage)
                 .frame(width: 44, height: 44).background(Color.sage.opacity(0.09), in: RoundedRectangle(cornerRadius: 14))
             Text(eyebrow).font(.system(size: 9, weight: .semibold)).tracking(1.3).foregroundStyle(Color.muted)
-            Text(title).font(.system(size: 25, weight: .regular, design: .serif)).tracking(-0.5).multilineTextAlignment(.center)
+            Text(title).font(.system(size: 25, weight: .semibold)).tracking(-0.5).multilineTextAlignment(.center)
             Text(bodyText).font(.system(size: 12)).foregroundStyle(Color.muted).multilineTextAlignment(.center).lineSpacing(3).frame(maxWidth: 430)
         }
     }
@@ -163,7 +163,7 @@ private struct ShortcutCard: View {
             HStack(spacing: 5) {
                 ForEach(Array(shortcut), id: \.self) { character in
                     Text(String(character)).font(.system(size: 18, weight: .medium, design: .monospaced))
-                        .frame(minWidth: 32, minHeight: 34).background(Color.white, in: RoundedRectangle(cornerRadius: 7))
+                        .frame(minWidth: 32, minHeight: 34).background(Color.raised, in: RoundedRectangle(cornerRadius: 7))
                         .overlay(RoundedRectangle(cornerRadius: 7).stroke(Color.line))
                 }
             }
@@ -173,8 +173,7 @@ private struct ShortcutCard: View {
             }
             Spacer()
         }
-        .padding(16).background(Color.white.opacity(0.72), in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.line.opacity(0.85)))
+        .padding(16).nestSurface()
         .frame(maxWidth: 430)
     }
 }
@@ -187,7 +186,7 @@ private struct LibraryPreviewCard: View {
                 Text("Search your library").font(.system(size: 11)).foregroundStyle(Color.muted)
                 Spacer()
                 Text("⌘F").font(.system(size: 10, design: .monospaced)).foregroundStyle(Color.muted.opacity(0.65))
-            }.padding(10).background(Color.white.opacity(0.8), in: RoundedRectangle(cornerRadius: 8))
+            }.padding(10).nestSurface(radius: 10, elevated: true)
             previewRow(title: "The details that make a Mac app feel at home", domain: "developer.apple.com", icon: "sparkles")
             previewRow(title: "A thoughtful article you saved for later", domain: "example.com", icon: "bookmark")
             HStack(spacing: 8) {
@@ -196,15 +195,14 @@ private struct LibraryPreviewCard: View {
                 Spacer()
             }.font(.system(size: 10, weight: .medium)).foregroundStyle(Color.sage).padding(.top, 2)
         }
-        .padding(15).background(Color.sidebar.opacity(0.65), in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.line.opacity(0.75)))
+        .padding(15).nestSurface()
         .frame(maxWidth: 430)
     }
 
     private func previewRow(title: String, domain: String, icon: String) -> some View {
         HStack(spacing: 10) {
             Image(systemName: icon).font(.system(size: 12)).foregroundStyle(Color.sage)
-                .frame(width: 28, height: 28).background(Color.white, in: RoundedRectangle(cornerRadius: 7))
+                .frame(width: 28, height: 28).background(Color.raised, in: RoundedRectangle(cornerRadius: 7))
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).font(.system(size: 11, weight: .medium)).lineLimit(1)
                 Text(domain).font(.system(size: 10)).foregroundStyle(Color.muted)
@@ -219,7 +217,7 @@ private struct TidyPreviewCard: View {
         VStack(spacing: 10) {
             HStack(spacing: 10) {
                 Image(systemName: "trash").font(.system(size: 12, weight: .semibold)).foregroundStyle(Color.muted)
-                    .frame(width: 32, height: 32).background(Color.white, in: RoundedRectangle(cornerRadius: 8))
+                    .frame(width: 32, height: 32).background(Color.raised, in: RoundedRectangle(cornerRadius: 8))
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Delete").font(.system(size: 12, weight: .medium))
                     Text("Remove it from your library").font(.system(size: 10)).foregroundStyle(Color.muted)
@@ -232,15 +230,14 @@ private struct TidyPreviewCard: View {
                     Text("Move it out of the way").font(.system(size: 10)).foregroundStyle(Color.muted)
                 }
             }
-            .padding(15).background(Color.white.opacity(0.75), in: RoundedRectangle(cornerRadius: 11))
+            .padding(15).nestSurface(radius: 12, elevated: true)
             HStack(spacing: 7) {
                 Image(systemName: "hand.draw").font(.system(size: 11))
                 Text("Short swipe reveals both actions")
                 Spacer()
             }.font(.system(size: 10, weight: .medium)).foregroundStyle(Color.sage)
         }
-        .padding(14).background(Color.sidebar.opacity(0.65), in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.line.opacity(0.75)))
+        .padding(14).nestSurface()
         .frame(maxWidth: 430)
     }
 }

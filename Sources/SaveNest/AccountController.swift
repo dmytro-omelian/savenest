@@ -73,6 +73,7 @@ final class AccountController: NSObject, ObservableObject {
     var canManageBilling: Bool { account?.subscription.plan != nil || account?.subscription.status == "unavailable" }
     override init() {
         super.init()
+        guard !AppLaunch.isPreview else { return }
         do {
             accessToken = try AccountKeychain.token(); hasLogin = accessToken != nil
             restorePendingSignIn(try AccountKeychain.pending())

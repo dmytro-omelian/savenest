@@ -85,7 +85,7 @@ struct AccountView: View {
             }.padding(30)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color.paper).foregroundStyle(Color.ink).preferredColorScheme(.light)
+        .background(Color.paper).foregroundStyle(Color.ink).nestAppearance()
     }
     private func plan(_ title: String, amount: String, offer: String, renewal: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 9) {
@@ -93,7 +93,7 @@ struct AccountView: View {
             Text(offer).font(.system(size: 13, weight: .medium)).foregroundStyle(Color.sage)
             Text(renewal).font(.system(size: 11)).foregroundStyle(Color.muted)
             Button("Subscribe for $1.99 ↗") { Task { await account.checkout(plan: value) } }.buttonStyle(QuietButton()).disabled(account.isBusy)
-        }.padding(17).frame(maxWidth: .infinity, alignment: .leading).background(Color.white.opacity(0.75), in: RoundedRectangle(cornerRadius: 11))
+        }.padding(20).frame(maxWidth: .infinity, alignment: .leading).nestSurface()
     }
 }
 
@@ -107,7 +107,9 @@ struct AccountBanner: View {
                 Text(account.hasLogin ? "Check your subscription to save new links." : "Sign in to start saving links.").font(.system(size: 12))
                 Spacer()
                 Button(account.hasLogin ? "Account" : "Sign in", action: openAccount).buttonStyle(.link).font(.system(size: 12, weight: .medium))
-            }.padding(.horizontal, 34).padding(.vertical, 13).background(Color.sage.opacity(0.065))
+            }.padding(14).background(Color.sage.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.sage.opacity(0.2)))
+                .padding(.horizontal, 26).padding(.top, 16)
         }
     }
 }
