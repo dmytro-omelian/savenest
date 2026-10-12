@@ -28,7 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var pendingURLs: [URL] = []
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
-        NSApp.appearance = NSAppearance(named: .darkAqua)
+        NSApp.appearance = AppAppearance.saved.nativeAppearance
         model = AppModel()
         model.showTabSearch = { [weak self] in self?.openTabSearch() }
         model.tabSearch.close = { [weak self] in self?.tabSearchPanel?.orderOut(nil) }

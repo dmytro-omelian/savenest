@@ -1,14 +1,48 @@
 import SwiftUI
 
+enum AppAppearance: String, CaseIterable, Identifiable {
+    case cream, black
+    static let preferenceKey = "appAppearance"
+    static var saved: AppAppearance {
+        AppAppearance(rawValue: UserDefaults.standard.string(forKey: preferenceKey) ?? "") ?? .black
+    }
+    var id: String { rawValue }
+    var title: String { self == .cream ? "Cream" : "Black" }
+    var subtitle: String { self == .cream ? "Original cream & sage" : "Charcoal & emerald" }
+    var colorScheme: ColorScheme { self == .cream ? .light : .dark }
+    var nativeAppearance: NSAppearance? { NSAppearance(named: self == .cream ? .aqua : .darkAqua) }
+    var previewPaper: Color { self == .cream ? Color(red: 0.980, green: 0.976, blue: 0.965) : Color(red: 0.075, green: 0.079, blue: 0.083) }
+    var previewSurface: Color { self == .cream ? Color.white : Color(red: 0.115, green: 0.122, blue: 0.130) }
+    var previewAccent: Color { self == .cream ? Color(red: 0.32, green: 0.39, blue: 0.26) : Color(red: 0.23, green: 0.82, blue: 0.63) }
+    var previewInk: Color { self == .cream ? Color(red: 0.16, green: 0.18, blue: 0.15) : Color(red: 0.94, green: 0.95, blue: 0.95) }
+}
+
+/// Each hosting surface observes the saved choice, including standalone floating panels.
+private struct NestAppearance: ViewModifier {
+    @AppStorage(AppAppearance.preferenceKey) private var appearance = AppAppearance.black.rawValue
+    private var selected: AppAppearance { AppAppearance(rawValue: appearance) ?? .black }
+    func body(content: Content) -> some View {
+        content.preferredColorScheme(selected.colorScheme).tint(Color.sage)
+    }
+}
+
 extension Color {
-    static let paper = Color(red: 0.075, green: 0.079, blue: 0.083)
-    static let sidebar = Color(red: 0.095, green: 0.101, blue: 0.108)
-    static let surface = Color(red: 0.115, green: 0.122, blue: 0.130)
-    static let raised = Color(red: 0.145, green: 0.154, blue: 0.165)
-    static let ink = Color(red: 0.94, green: 0.95, blue: 0.95)
-    static let sage = Color(red: 0.23, green: 0.82, blue: 0.63)
-    static let muted = Color(red: 0.62, green: 0.65, blue: 0.68)
-    static let line = Color(red: 0.22, green: 0.24, blue: 0.26)
+    static let paper = adaptive(cream: (0.980, 0.976, 0.965), black: (0.075, 0.079, 0.083))
+    static let sidebar = adaptive(cream: (0.949, 0.949, 0.925), black: (0.095, 0.101, 0.108))
+    static let surface = adaptive(cream: (0.994, 0.993, 0.990), black: (0.115, 0.122, 0.130))
+    static let raised = adaptive(cream: (1, 1, 1), black: (0.145, 0.154, 0.165))
+    static let ink = adaptive(cream: (0.16, 0.18, 0.15), black: (0.94, 0.95, 0.95))
+    static let sage = adaptive(cream: (0.32, 0.39, 0.26), black: (0.23, 0.82, 0.63))
+    static let muted = adaptive(cream: (0.46, 0.49, 0.42), black: (0.62, 0.65, 0.68))
+    static let line = adaptive(cream: (0.88, 0.89, 0.85), black: (0.22, 0.24, 0.26))
+    static let onAccent = adaptive(cream: (1, 1, 1), black: (0.075, 0.079, 0.083))
+
+    private static func adaptive(cream: (Double, Double, Double), black: (Double, Double, Double)) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            let rgb = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? black : cream
+            return NSColor(srgbRed: rgb.0, green: rgb.1, blue: rgb.2, alpha: 1)
+        })
+    }
 }
 
 /// One shared surface treatment for editors, search fields, and inset cards.
@@ -23,6 +57,7 @@ struct NestSurface: ViewModifier {
 }
 
 extension View {
+    func nestAppearance() -> some View { modifier(NestAppearance()) }
     func nestSurface(radius: CGFloat = 14, elevated: Bool = false) -> some View {
         modifier(NestSurface(radius: radius, elevated: elevated))
     }
@@ -54,7 +89,7 @@ struct SageButton: ButtonStyle {
     @Environment(\.isEnabled) private var enabled
     func makeBody(configuration: Configuration) -> some View {
         configuration.label.font(.system(size: 12, weight: .semibold)).padding(.horizontal, 15).padding(.vertical, 10)
-            .foregroundStyle(Color.paper).background(Color.sage.opacity(enabled ? (configuration.isPressed ? 0.75 : 1) : 0.35), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .foregroundStyle(Color.onAccent).background(Color.sage.opacity(enabled ? (configuration.isPressed ? 0.75 : 1) : 0.35), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }
 struct QuietButton: ButtonStyle {
@@ -66,6 +101,7 @@ struct QuietButton: ButtonStyle {
     }
 }
 struct DomainIcon: View {
+    @Environment(\.colorScheme) private var colorScheme
     let domain: String
     var url: String? = nil
     var iconURL: String? = nil
@@ -74,13 +110,13 @@ struct DomainIcon: View {
     private var hue: Double { Double(domain.utf8.reduce(0) { ($0 + Int($1)) % 360 }) / 360 }
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 12, style: .continuous).fill(image == nil ? Color(hue: hue, saturation: 0.18, brightness: 0.24) : Color.raised)
+            RoundedRectangle(cornerRadius: 12, style: .continuous).fill(image == nil ? Color(hue: hue, saturation: colorScheme == .dark ? 0.18 : 0.10, brightness: colorScheme == .dark ? 0.24 : 0.94) : Color.raised)
             if let image {
                 Image(nsImage: image).resizable().interpolation(.high).scaledToFit().frame(width: 26, height: 26)
                     .clipShape(RoundedRectangle(cornerRadius: 5))
             } else {
                 Text(String(domain.prefix(1)).uppercased()).font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(Color(hue: hue, saturation: 0.22, brightness: 0.84))
+                    .foregroundStyle(Color(hue: hue, saturation: colorScheme == .dark ? 0.22 : 0.28, brightness: colorScheme == .dark ? 0.84 : 0.50))
             }
         }.frame(width: 42, height: 42).accessibilityHidden(true)
             .task(id: requestID) {

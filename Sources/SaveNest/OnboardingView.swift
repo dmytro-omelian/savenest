@@ -17,7 +17,7 @@ struct OnboardingView: View {
         .frame(width: 590, height: 540)
         .background(Color.paper)
         .foregroundStyle(Color.ink)
-        .preferredColorScheme(.dark)
+        .nestAppearance()
     }
 
     private var header: some View {

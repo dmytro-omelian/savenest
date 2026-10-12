@@ -39,7 +39,7 @@ struct CaptureNoticeView: View {
         .padding(18).frame(width: 370, alignment: .leading)
         .background(Color.paper.opacity(0.96), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Color.line.opacity(0.9)))
-        .preferredColorScheme(.dark)
+        .nestAppearance()
         .accessibilityElement(children: .contain)
     }
 }

@@ -35,7 +35,7 @@ struct QuickCaptureView: View {
                     Task { _ = await model.saveDraft(link); saving = false }
                 }.buttonStyle(SageButton()).keyboardShortcut(.return, modifiers: .command).disabled(saving)
             }
-        }.padding(24).frame(width: 460).background(Color.paper).foregroundStyle(Color.ink).preferredColorScheme(.dark)
+        }.padding(24).frame(width: 460).background(Color.paper).foregroundStyle(Color.ink).nestAppearance()
             .onAppear { if draft.action == .note { focus = .note } }
     }
     private var noteField: some View {

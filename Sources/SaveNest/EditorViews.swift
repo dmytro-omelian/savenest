@@ -26,7 +26,7 @@ struct AddLinkView: View {
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction).buttonStyle(.plain)
                 Button(saving ? "Saving…" : "Save link") { saving = true; Task { if await model.add(url: url, title: title, collection: collection, note: note, tags: tags + SavedLink.parseTags(tagInput)) { dismiss() }; saving = false } }.buttonStyle(SageButton()).keyboardShortcut(.return, modifiers: .command).disabled(saving || Library.validatedURL(url) == nil)
             }.padding(.top, 8)
-        }.textFieldStyle(.roundedBorder).padding(32).frame(width: 470).background(Color.paper).foregroundStyle(Color.ink).preferredColorScheme(.dark)
+        }.textFieldStyle(.roundedBorder).padding(32).frame(width: 470).background(Color.paper).foregroundStyle(Color.ink).nestAppearance()
             .onAppear { focused = true; if model.library.collections.contains(model.filter) { collection = model.filter } }
     }
 }
@@ -72,7 +72,7 @@ struct LinkDetailView: View {
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction).buttonStyle(.plain)
                 Button(saving ? "Saving…" : "Save changes") { link.tags = SavedLink.normalizedTags(link.tags + SavedLink.parseTags(tagsText)); saving = true; Task { if await model.update(link) { dismiss() }; saving = false } }.buttonStyle(SageButton()).keyboardShortcut(.return, modifiers: .command).disabled(saving)
             }
-        }.padding(32).frame(width: 510).background(Color.paper).foregroundStyle(Color.ink).preferredColorScheme(.dark)
+        }.padding(32).frame(width: 510).background(Color.paper).foregroundStyle(Color.ink).nestAppearance()
             .interactiveDismissDisabled()
             .alert("Delete this link?", isPresented: $confirmingDelete) {
                 Button("Cancel", role: .cancel) {}
@@ -124,18 +124,21 @@ struct TabSelectionView: View {
                         .buttonStyle(SageButton()).keyboardShortcut(.defaultAction).disabled(draft.selected.isEmpty)
                 }
             }
-        }.padding(28).frame(width: 520).background(Color.paper).foregroundStyle(Color.ink).preferredColorScheme(.dark)
+        }.padding(28).frame(width: 520).background(Color.paper).foregroundStyle(Color.ink).nestAppearance()
     }
 }
 
 struct SettingsView: View {
     @ObservedObject var model: AppModel
+    @AppStorage(AppAppearance.preferenceKey) private var appearance = AppAppearance.black.rawValue
+    @State private var archiveIDs: Set<UUID>?
     var onBack: () -> Void = {}
     var body: some View {
         ScrollView { VStack(alignment: .leading, spacing: 26) {
             Button { onBack() } label: { Label("Library", systemImage: "chevron.left") }
                 .buttonStyle(.plain).font(.system(size: 12, weight: .medium)).foregroundStyle(Color.muted)
             sheetHeading("Make yourself at home.", subtitle: "A few small things, just how you like them.")
+            appearancePicker
             Button("Account & subscription…") { model.showAccount?() }.buttonStyle(QuietButton())
             VStack(alignment: .leading, spacing: 15) {
                 fieldLabel("KEYBOARD SHORTCUTS")
@@ -178,7 +181,9 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 13) {
                 fieldLabel("YOUR LIBRARY")
                 Text("Swipe left to reveal Delete and Archive, or right for Email and Copy. A long left swipe archives immediately; Undo appears at the bottom. In Archive, swipe left to restore.").font(.system(size: 11)).foregroundStyle(Color.muted).lineSpacing(4)
-                Text("Archive all links is in the library menu. Empty archive is inside Archive and asks before deleting permanently.").font(.system(size: 11)).foregroundStyle(Color.muted).lineSpacing(4)
+                Text("Archive all links to clear your active library. Notes and tags stay with their links, and you can undo it. Empty archive is inside Archive and asks before deleting permanently.").font(.system(size: 11)).foregroundStyle(Color.muted).lineSpacing(4)
+                Button("Archive all links…") { archiveIDs = model.activeIDs }
+                    .buttonStyle(QuietButton()).disabled(model.activeIDs.isEmpty)
                 HStack {
                     Button("Export backup…") { model.exportLibrary() }.buttonStyle(QuietButton())
                     Button("Import backup…") { model.importLibrary() }.buttonStyle(QuietButton())
@@ -189,7 +194,68 @@ struct SettingsView: View {
             HStack { NestMark().frame(width: 20, height: 20); Text("SaveNest " + (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "development")); Spacer(); Text("A small app for a clearer mind.") }.font(.system(size: 10)).foregroundStyle(Color.muted)
         }.padding(32) }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color.paper).foregroundStyle(Color.ink).preferredColorScheme(.dark)
+        .background(Color.paper).foregroundStyle(Color.ink).nestAppearance()
+        .alert(archiveIDs.map { "Archive \($0.count) \($0.count == 1 ? "link" : "links")?" } ?? "", isPresented: Binding(get: { archiveIDs != nil }, set: { if !$0 { archiveIDs = nil } }), presenting: archiveIDs) { ids in
+            Button("Cancel", role: .cancel) { archiveIDs = nil }
+            Button("Archive all") {
+                model.setArchived(true, ids: ids)
+                archiveIDs = nil
+                model.section = .library
+            }
+        } message: { _ in
+            Text("All saved links will move to Archive, including links hidden by filters. Your notes and tags stay with them. You can undo this.")
+        }
+    }
+
+    private var appearancePicker: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            fieldLabel("APPEARANCE")
+            HStack(spacing: 12) {
+                ForEach(AppAppearance.allCases) { option in
+                    Button { appearance = option.rawValue } label: {
+                        VStack(alignment: .leading, spacing: 10) {
+                            appearancePreview(option)
+                            HStack {
+                                Text(option.title).font(.system(size: 12, weight: .semibold))
+                                Spacer()
+                                Image(systemName: appearance == option.rawValue ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(appearance == option.rawValue ? Color.sage : Color.muted.opacity(0.5))
+                            }
+                            Text(option.subtitle).font(.system(size: 10)).foregroundStyle(Color.muted)
+                        }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(appearance == option.rawValue ? Color.sage.opacity(0.6) : Color.line.opacity(0.7), lineWidth: 1))
+                            .contentShape(RoundedRectangle(cornerRadius: 14))
+                    }.buttonStyle(.plain).accessibilityLabel("\(option.title) appearance")
+                        .accessibilityValue(appearance == option.rawValue ? "Selected" : "Not selected")
+                        .accessibilityAddTraits(appearance == option.rawValue ? .isSelected : [])
+                }
+            }
+            Text("Applies throughout SaveNest. Your choice is remembered.").font(.system(size: 11)).foregroundStyle(Color.muted)
+        }
+    }
+
+    private func appearancePreview(_ option: AppAppearance) -> some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 3) {
+                    ForEach(0..<3, id: \.self) { _ in Circle().fill(option.previewInk.opacity(0.2)).frame(width: 3, height: 3) }
+                }
+                Capsule().fill(option.previewInk.opacity(0.7)).frame(width: 55, height: 4)
+                HStack(spacing: 6) {
+                    RoundedRectangle(cornerRadius: 4).fill(option.previewAccent.opacity(0.15)).frame(width: 20, height: 20)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Capsule().fill(option.previewInk.opacity(0.45)).frame(height: 3)
+                        Capsule().fill(option.previewInk.opacity(0.18)).frame(width: 40, height: 3)
+                    }
+                }.padding(7).background(option.previewSurface, in: RoundedRectangle(cornerRadius: 7))
+            }.frame(maxWidth: .infinity)
+            VStack(spacing: 8) {
+                Image(systemName: "tray.fill").foregroundStyle(option.previewAccent)
+                Image(systemName: "plus").foregroundStyle(option.previewInk.opacity(0.4))
+            }.font(.system(size: 9)).padding(7).background(option.previewSurface, in: Capsule())
+        }.padding(12).frame(height: 90).background(option.previewPaper, in: RoundedRectangle(cornerRadius: 9))
+            .accessibilityHidden(true)
     }
 }
 func fieldLabel(_ text: String) -> some View { Text(text).font(.system(size: 9, weight: .semibold)).tracking(1.3).foregroundStyle(Color.muted) }

@@ -3,6 +3,7 @@ import SaveNestCore
 
 struct AppRootView: View {
     @ObservedObject var model: AppModel
+    @AppStorage(AppAppearance.preferenceKey) private var appearance = AppAppearance.black.rawValue
 
     var body: some View {
         HStack(spacing: 0) {
@@ -21,7 +22,10 @@ struct AppRootView: View {
         .background(Color.paper)
         .foregroundStyle(Color.ink)
         .tint(Color.sage)
-        .preferredColorScheme(.dark)
+        .nestAppearance()
+        .onChange(of: appearance) { _, value in
+            NSApp.appearance = (AppAppearance(rawValue: value) ?? .black).nativeAppearance
+        }
         .animation(.easeInOut(duration: 0.16), value: model.sectionKey)
     }
 

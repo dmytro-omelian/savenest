@@ -85,7 +85,7 @@ struct AccountView: View {
             }.padding(30)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color.paper).foregroundStyle(Color.ink).preferredColorScheme(.dark)
+        .background(Color.paper).foregroundStyle(Color.ink).nestAppearance()
     }
     private func plan(_ title: String, amount: String, offer: String, renewal: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 9) {

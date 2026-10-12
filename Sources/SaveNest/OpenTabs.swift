@@ -190,7 +190,7 @@ struct TabSearchView: View {
                 .font(.system(size: 10)).foregroundStyle(Color.muted).padding(.horizontal, 18).padding(.vertical, 11)
         }.frame(width: 610).background(Color.paper, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Color.line.opacity(0.8)))
-            .foregroundStyle(Color.ink).preferredColorScheme(.dark)
+            .foregroundStyle(Color.ink).nestAppearance()
             .onAppear { focused = true }
             .onChange(of: model.query) { _, _ in model.selectedIndex = 0 }
     }

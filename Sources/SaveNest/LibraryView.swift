@@ -8,7 +8,6 @@ struct LibraryView: View {
     @State private var bulkAction: BulkAction?
     private struct BulkAction: Identifiable {
         let id = UUID()
-        let deleting: Bool
         let ids: Set<UUID>
         var count: String { "\(ids.count) " + (ids.count == 1 ? "link" : "links") }
     }
@@ -32,7 +31,7 @@ struct LibraryView: View {
                 HStack {
                     Text("Kept here until you’re ready to let go.").foregroundStyle(Color.muted)
                     Spacer()
-                    Button("Empty archive…") { bulkAction = BulkAction(deleting: true, ids: model.archivedIDs) }
+                    Button("Empty archive…") { bulkAction = BulkAction(ids: model.archivedIDs) }
                         .buttonStyle(.plain).foregroundStyle(Color.muted).help("Permanently delete all archived links")
                 }.font(.system(size: 11)).padding(.horizontal, 38).padding(.top, 14)
             }
@@ -83,17 +82,14 @@ struct LibraryView: View {
         .background(Color.paper).foregroundStyle(Color.ink)
         .frame(minWidth: 560, minHeight: 480)
         .sheet(item: $model.sharingLink) { EmailShareView(link: $0) }
-        .alert(bulkAction.map { $0.deleting ? "Permanently delete \($0.count)?" : "Archive \($0.count)?" } ?? "", isPresented: Binding(get: { bulkAction != nil }, set: { if !$0 { bulkAction = nil } }), presenting: bulkAction) { action in
+        .alert(bulkAction.map { "Permanently delete \($0.count)?" } ?? "", isPresented: Binding(get: { bulkAction != nil }, set: { if !$0 { bulkAction = nil } }), presenting: bulkAction) { action in
             Button("Cancel", role: .cancel) { bulkAction = nil }
-            Button(action.deleting ? "Delete forever" : "Archive all", role: action.deleting ? .destructive : nil) {
-                if action.deleting { model.emptyArchive(ids: action.ids) }
-                else { model.setArchived(true, ids: action.ids) }
+            Button("Delete forever", role: .destructive) {
+                model.emptyArchive(ids: action.ids)
                 bulkAction = nil
             }
-        } message: { action in
-            Text(action.deleting
-                 ? "These archived links, notes, and tags will be removed from this Mac. This cannot be undone. Links outside Archive are kept."
-                 : "All saved links will move to Archive, including links hidden by filters. Your notes and tags stay with them. You can undo this.")
+        } message: { _ in
+            Text("These archived links, notes, and tags will be removed from this Mac. This cannot be undone. Links outside Archive are kept.")
         }
         .sheet(isPresented: $model.showingAdd) { AddLinkView(model: model) }
         .sheet(item: Binding(get: { model.selected }, set: { model.selectedID = $0?.id })) { link in LinkDetailView(model: model, link: link) }
@@ -166,13 +162,6 @@ struct LibraryView: View {
                     Circle().fill(model.isCapturing ? Color.orange : Color.sage).frame(width: 5, height: 5)
                     Text(model.isPreview ? "Sample library" : model.isCapturing ? "Saving…" : "On your Mac").font(.system(size: 10, weight: .medium)).foregroundStyle(Color.muted)
                 }
-                Menu {
-                    Button("Account…") { model.showAccount?() }
-                    Button("Settings…") { model.showSettings?() }
-                    Divider()
-                    Button("Archive all links…") { bulkAction = BulkAction(deleting: false, ids: model.activeIDs) }.disabled(model.activeIDs.isEmpty)
-                    Button("Export backup…") { model.exportLibrary() }
-                } label: { Image(systemName: "ellipsis").font(.system(size: 14)) }.menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().help("Library options")
             }
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 6) {
