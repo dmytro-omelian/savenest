@@ -133,6 +133,13 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
     case capture = "Capture"
     case library = "Library"
     var id: Self { self }
+    var icon: String {
+        switch self {
+        case .general: "sparkles"
+        case .capture: "command"
+        case .library: "tray.full"
+        }
+    }
 }
 
 struct SettingsView: View {
@@ -147,11 +154,7 @@ struct SettingsView: View {
                 .buttonStyle(.plain).font(.system(size: 12, weight: .medium)).foregroundStyle(Color.muted)
             sheetHeading("Make yourself at home.", subtitle: "A few small things, just how you like them.")
             if let error = model.error { Text(error).font(.system(size: 11)).foregroundStyle(.red) }
-            NestTabBar(selection: $selectedTab, items: [
-                (.general, "General", "sparkles"),
-                (.capture, "Capture", "command"),
-                (.library, "Library", "tray.full")
-            ])
+            settingsTabs
             settingsContent.id(selectedTab).transition(.opacity.combined(with: .move(edge: .top)))
             HStack { NestMark().frame(width: 20, height: 20); Text("SaveNest " + (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "development")); Spacer(); Text("A small app for a clearer mind.") }.font(.system(size: 10)).foregroundStyle(Color.muted)
         }.padding(32) }
@@ -166,6 +169,38 @@ struct SettingsView: View {
             }
         } message: { _ in
             Text("All saved links will move to Archive, including links hidden by filters. Your notes and tags stay with them. You can undo this.")
+        }
+    }
+
+    private var settingsTabs: some View {
+        HStack(spacing: 10) {
+            ForEach(SettingsTab.allCases) { tab in
+                let selected = selectedTab == tab
+                Button {
+                    withAnimation(.easeOut(duration: 0.18)) { selectedTab = tab }
+                } label: {
+                    HStack(spacing: 9) {
+                        Image(systemName: tab.icon)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(selected ? Color.sage : Color.muted)
+                            .frame(width: 25, height: 25)
+                            .background(selected ? Color.sage.opacity(0.12) : Color.line.opacity(0.28), in: Circle())
+                        Text(tab.rawValue)
+                            .font(.system(size: 12, weight: selected ? .semibold : .medium))
+                            .foregroundStyle(selected ? Color.ink : Color.muted)
+                        Spacer(minLength: 0)
+                        Circle().fill(Color.sage).frame(width: 5, height: 5).opacity(selected ? 1 : 0)
+                    }
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 9)
+                    .frame(maxWidth: .infinity)
+                    .background(selected ? Color.sage.opacity(0.07) : Color.surface.opacity(0.45), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(selected ? Color.sage.opacity(0.28) : Color.line.opacity(0.55)))
+                    .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(selected ? .isSelected : [])
+            }
         }
     }
 
