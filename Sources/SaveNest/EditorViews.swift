@@ -128,10 +128,18 @@ struct TabSelectionView: View {
     }
 }
 
+private enum SettingsTab: String, CaseIterable, Identifiable {
+    case general = "General"
+    case capture = "Capture"
+    case library = "Library"
+    var id: Self { self }
+}
+
 struct SettingsView: View {
     @ObservedObject var model: AppModel
     @AppStorage(AppAppearance.preferenceKey) private var appearance = AppAppearance.black.rawValue
     @State private var archiveIDs: Set<UUID>?
+    @State private var selectedTab = SettingsTab.general
     var onBack: () -> Void = {}
     var body: some View {
         ScrollView { VStack(alignment: .leading, spacing: 26) {
@@ -139,83 +147,10 @@ struct SettingsView: View {
                 .buttonStyle(.plain).font(.system(size: 12, weight: .medium)).foregroundStyle(Color.muted)
             sheetHeading("Make yourself at home.", subtitle: "A few small things, just how you like them.")
             if let error = model.error { Text(error).font(.system(size: 11)).foregroundStyle(.red) }
-            appearancePicker
-            AppUpdateSettingsView(updater: model.updater)
-            VStack(alignment: .leading, spacing: 12) {
-                fieldLabel("CLIPBOARD")
-                Toggle("Offer to save copied links", isOn: $model.clipboardEnabled)
-                Text("When enabled, SaveNest checks new clipboard items for a single web link and offers Save or Add note. It skips links already saved and items marked private. Clipboard contents stay on this Mac. You can also choose Save copied link from the menu bar anytime.")
-                    .font(.system(size: 11)).foregroundStyle(Color.muted).fixedSize(horizontal: false, vertical: true)
-                Button("Preview clipboard offer") { model.notify(CaptureNotice(title: "Save copied link?", message: "example.com", clipboardURL: URL(string: "https://example.com/clipboard-preview")!)) }
-                    .buttonStyle(.link).font(.system(size: 11))
-            }.padding(20).nestSurface()
-            VStack(alignment: .leading, spacing: 12) {
-                fieldLabel("AUTO-TAGGING")
-                Toggle("Suggest tags when saving links", isOn: $model.autoTaggingEnabled)
-                Text("Uses patterns from titles, websites, and tags already in your library. Suggestions stay on this Mac and use only your existing tags. Turn this off to save new links without automatic tags.")
-                    .font(.system(size: 11)).foregroundStyle(Color.muted).fixedSize(horizontal: false, vertical: true)
-            }.padding(20).nestSurface()
-            VStack(alignment: .leading, spacing: 12) {
-                fieldLabel("ANONYMOUS USAGE")
-                Toggle("Share anonymous usage counts", isOn: $model.analyticsEnabled)
-                Text("Help improve SaveNest by sharing counts of app launches, saves, opens, copies, notes, tags, archives, and importance labels with savenest.app. No URLs, titles, notes, tags, clipboard text, account IDs, or device identifiers are included. Turning this off clears unsent counts and cancels reporting. Counts already sent cannot be tied back to you.")
-                    .font(.system(size: 11)).foregroundStyle(Color.muted).fixedSize(horizontal: false, vertical: true)
-                Text("The hosting service receives ordinary network information, such as your IP address, when a request arrives. The usage report stores only aggregate counts by day.")
-                    .font(.system(size: 11)).foregroundStyle(Color.muted).fixedSize(horizontal: false, vertical: true)
-                OwnerUsageView(account: model.account)
-            }.padding(20).nestSurface()
-            Button("Account & subscription…") { model.showAccount?() }.buttonStyle(QuietButton())
-            VStack(alignment: .leading, spacing: 15) {
-                fieldLabel("KEYBOARD SHORTCUTS")
-                Button("Use memorable preset: ⇧⌘K / ⇧⌘N") { model.applyMemorableShortcuts() }
-                    .buttonStyle(.link).font(.system(size: 11))
-                Text("Same starting keys: K saves and N adds a note with optional tags. Replaces these two shortcuts only. Some browsers use these combinations too.").font(.system(size: 11)).foregroundStyle(Color.muted)
-                Button("Show the quick tour") { model.showOnboarding() }.buttonStyle(.link).font(.system(size: 11))
-                ForEach(CaptureAction.allCases) { action in
-                    VStack(alignment: .leading, spacing: 5) {
-                        HStack {
-                            Text(action.title).font(.system(size: 12, weight: .medium))
-                            Spacer()
-                            ShortcutRecorder(label: (model.shortcuts[action] ?? action.defaultShortcut).label,
-                                onStart: { model.hotkey.unregister() },
-                                onRecord: { model.configureShortcut($0, for: action) }).frame(width: 145, height: 30)
-                            Button { model.configureShortcut(action.defaultShortcut, for: action) } label: { Image(systemName: "arrow.counterclockwise") }
-                                .buttonStyle(.plain).foregroundStyle(Color.muted).help("Reset \(action.title) shortcut")
-                        }
-                        if action == .duplicates {
-                            Text("Also removes empty new tabs. Chromium browsers normally use ⇧⌘D for Bookmark all tabs, so you can change this shortcut here.")
-                                .font(.system(size: 10)).foregroundStyle(Color.muted).fixedSize(horizontal: false, vertical: true)
-                        }
-                        if let error = model.shortcutErrors[action] { Text(error).font(.system(size: 10)).foregroundStyle(.red) }
-                    }
-                }
-                Text("Click a shortcut, then press your new combination. Escape cancels.")
-                    .font(.system(size: 11)).foregroundStyle(Color.muted).fixedSize(horizontal: false, vertical: true)
-                Button("Preview popup") { model.notify(CaptureError.noTabs.notice) }.buttonStyle(.link).font(.system(size: 11))
-            }.padding(20).nestSurface()
-            VStack(alignment: .leading, spacing: 12) {
-                fieldLabel("AFTER SAVING")
-                Toggle("Close source tab after a successful save", isOn: $model.closeAfterQuickSave)
-                Text("Applies to Save link and Save with a note. SaveNest verifies that the tab has not changed before closing it. Saving selected tabs or an entire window never closes tabs.")
-                    .font(.system(size: 11)).foregroundStyle(Color.muted).fixedSize(horizontal: false, vertical: true)
-            }.padding(20).nestSurface()
-            VStack(alignment: .leading, spacing: 10) {
-                fieldLabel("BROWSERS & PRIVACY")
-                Text("SaveNest reads browser tabs only when you use a capture or tab tool. Links, notes, and tags stay on this Mac.")
-                    .font(.system(size: 11)).foregroundStyle(Color.muted).lineSpacing(4)
-                Button("Open Automation Settings ↗") { NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")!) }.buttonStyle(.link).font(.system(size: 11))
-            }
-            VStack(alignment: .leading, spacing: 13) {
-                fieldLabel("YOUR LIBRARY")
-                Button("Archive all links…") { archiveIDs = model.activeIDs }
-                    .buttonStyle(QuietButton()).disabled(model.activeIDs.isEmpty)
-                HStack {
-                    Button("Export backup…") { model.exportLibrary() }.buttonStyle(QuietButton())
-                    Button("Import backup…") { model.importLibrary() }.buttonStyle(QuietButton())
-                    Spacer()
-                    Button("Show in Finder") { model.revealLibrary() }.buttonStyle(.link).font(.system(size: 11))
-                }
-            }
+            Picker("Settings section", selection: $selectedTab) {
+                ForEach(SettingsTab.allCases) { tab in Text(tab.rawValue).tag(tab) }
+            }.pickerStyle(.segmented).labelsHidden()
+            settingsContent
             HStack { NestMark().frame(width: 20, height: 20); Text("SaveNest " + (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "development")); Spacer(); Text("A small app for a clearer mind.") }.font(.system(size: 10)).foregroundStyle(Color.muted)
         }.padding(32) }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -229,6 +164,84 @@ struct SettingsView: View {
             }
         } message: { _ in
             Text("All saved links will move to Archive, including links hidden by filters. Your notes and tags stay with them. You can undo this.")
+        }
+    }
+
+    @ViewBuilder private var settingsContent: some View {
+        switch selectedTab {
+        case .general:
+            appearancePicker
+            AppUpdateSettingsView(updater: model.updater)
+            VStack(alignment: .leading, spacing: 12) {
+                fieldLabel("ANONYMOUS USAGE")
+                Toggle("Share anonymous usage counts", isOn: $model.analyticsEnabled)
+                Text("Share anonymous action counts with savenest.app. No URLs, titles, notes, tags, account IDs, or device identifiers are included.")
+                    .font(.system(size: 11)).foregroundStyle(Color.muted).fixedSize(horizontal: false, vertical: true)
+                OwnerUsageView(account: model.account)
+            }.padding(20).nestSurface()
+            Button("Account & subscription…") { model.showAccount?() }.buttonStyle(QuietButton())
+        case .capture:
+            VStack(alignment: .leading, spacing: 12) {
+                fieldLabel("CLIPBOARD")
+                Toggle("Offer to save copied links", isOn: $model.clipboardEnabled)
+                Text("Offers Save or Add note after you copy a new web link. Clipboard contents stay on this Mac.")
+                    .font(.system(size: 11)).foregroundStyle(Color.muted).fixedSize(horizontal: false, vertical: true)
+                Button("Preview clipboard offer") { model.notify(CaptureNotice(title: "Save copied link?", message: "example.com", clipboardURL: URL(string: "https://example.com/clipboard-preview")!)) }
+                    .buttonStyle(.link).font(.system(size: 11))
+            }.padding(20).nestSurface()
+            VStack(alignment: .leading, spacing: 12) {
+                fieldLabel("AUTO-TAGGING")
+                Toggle("Suggest tags when saving links", isOn: $model.autoTaggingEnabled)
+                Text("Uses titles, websites, and your existing tags. Everything stays on this Mac.")
+                    .font(.system(size: 11)).foregroundStyle(Color.muted).fixedSize(horizontal: false, vertical: true)
+            }.padding(20).nestSurface()
+            VStack(alignment: .leading, spacing: 15) {
+                fieldLabel("KEYBOARD SHORTCUTS")
+                Button("Use memorable preset: ⇧⌘K / ⇧⌘N") { model.applyMemorableShortcuts() }
+                    .buttonStyle(.link).font(.system(size: 11))
+                Button("Show the quick tour") { model.showOnboarding() }.buttonStyle(.link).font(.system(size: 11))
+                ForEach(CaptureAction.allCases) { action in
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack {
+                            Text(action.title).font(.system(size: 12, weight: .medium))
+                            Spacer()
+                            ShortcutRecorder(label: (model.shortcuts[action] ?? action.defaultShortcut).label,
+                                onStart: { model.hotkey.unregister() },
+                                onRecord: { model.configureShortcut($0, for: action) }).frame(width: 145, height: 30)
+                            Button { model.configureShortcut(action.defaultShortcut, for: action) } label: { Image(systemName: "arrow.counterclockwise") }
+                                .buttonStyle(.plain).foregroundStyle(Color.muted).help("Reset \(action.title) shortcut")
+                        }
+                        if let error = model.shortcutErrors[action] { Text(error).font(.system(size: 10)).foregroundStyle(.red) }
+                    }
+                }
+                Text("Click a shortcut, then press a new combination. Escape cancels.")
+                    .font(.system(size: 11)).foregroundStyle(Color.muted)
+                Button("Preview popup") { model.notify(CaptureError.noTabs.notice) }.buttonStyle(.link).font(.system(size: 11))
+            }.padding(20).nestSurface()
+            VStack(alignment: .leading, spacing: 12) {
+                fieldLabel("AFTER SAVING")
+                Toggle("Close source tab after a successful save", isOn: $model.closeAfterQuickSave)
+                Text("Applies to Save link and Save with a note. Bulk saves never close tabs.")
+                    .font(.system(size: 11)).foregroundStyle(Color.muted)
+            }.padding(20).nestSurface()
+            VStack(alignment: .leading, spacing: 10) {
+                fieldLabel("BROWSERS & PRIVACY")
+                Text("SaveNest reads browser tabs only when you use a capture or tab tool.")
+                    .font(.system(size: 11)).foregroundStyle(Color.muted)
+                Button("Open Automation Settings ↗") { NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")!) }.buttonStyle(.link).font(.system(size: 11))
+            }
+        case .library:
+            VStack(alignment: .leading, spacing: 13) {
+                fieldLabel("YOUR LIBRARY")
+                Button("Archive all links…") { archiveIDs = model.activeIDs }
+                    .buttonStyle(QuietButton()).disabled(model.activeIDs.isEmpty)
+                HStack {
+                    Button("Export backup…") { model.exportLibrary() }.buttonStyle(QuietButton())
+                    Button("Import backup…") { model.importLibrary() }.buttonStyle(QuietButton())
+                    Spacer()
+                    Button("Show in Finder") { model.revealLibrary() }.buttonStyle(.link).font(.system(size: 11))
+                }
+            }.padding(20).nestSurface()
         }
     }
 
