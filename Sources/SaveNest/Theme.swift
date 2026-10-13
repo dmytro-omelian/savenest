@@ -104,10 +104,11 @@ struct QuietButton: ButtonStyle {
 struct NestTabBar<Selection: Hashable>: View {
     @Binding var selection: Selection
     let items: [(value: Selection, title: String, icon: String?)]
+    var compact = false
     @Namespace private var activeTab
 
     var body: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: compact ? 2 : 5) {
             ForEach(items.indices, id: \.self) { index in
                 let item = items[index]
                 let selected = selection == item.value
@@ -118,33 +119,45 @@ struct NestTabBar<Selection: Hashable>: View {
                 } label: {
                     HStack(spacing: 7) {
                         if let icon = item.icon {
-                            Image(systemName: icon).font(.system(size: 11, weight: .semibold))
+                            Image(systemName: icon)
+                                .font(.system(size: compact ? 10 : 11, weight: .semibold))
+                                .foregroundStyle(selected ? Color.sage : Color.muted)
                         }
-                        Text(item.title).font(.system(size: 12, weight: .semibold))
+                        Text(item.title)
+                            .font(.system(size: compact ? 11 : 12, weight: compact ? .medium : .semibold))
+                            .foregroundStyle(selected ? Color.ink : Color.muted)
+                            .lineLimit(1)
                     }
-                    .foregroundStyle(selected ? Color.onAccent : Color.muted)
                     .frame(maxWidth: .infinity)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 9)
+                    .padding(.horizontal, compact ? 8 : 12)
+                    .padding(.vertical, compact ? 6 : 9)
                     .background {
                         if selected {
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(LinearGradient(colors: [Color.sage, Color.sage.opacity(0.82)], startPoint: .top, endPoint: .bottom))
+                            RoundedRectangle(cornerRadius: compact ? 7 : 10, style: .continuous)
+                                .fill(.regularMaterial)
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: compact ? 7 : 10, style: .continuous)
+                                        .strokeBorder(LinearGradient(
+                                            colors: [Color.white.opacity(0.42), Color.line.opacity(0.7)],
+                                            startPoint: .top,
+                                            endPoint: .bottom
+                                        ))
+                                }
                                 .matchedGeometryEffect(id: "active-tab", in: activeTab)
-                                .shadow(color: Color.sage.opacity(0.28), radius: 7, y: 3)
+                                .shadow(color: .black.opacity(compact ? 0.08 : 0.12), radius: compact ? 3 : 6, y: compact ? 1 : 2)
                         }
                     }
-                    .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: compact ? 7 : 10, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(item.title)
                 .accessibilityAddTraits(selected ? .isSelected : [])
             }
         }
-        .padding(4)
-        .background(Color.surface.opacity(0.92), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.line.opacity(0.72)))
-        .shadow(color: .black.opacity(0.06), radius: 10, y: 4)
+        .padding(compact ? 3 : 4)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: compact ? 10 : 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: compact ? 10 : 14, style: .continuous).strokeBorder(Color.line.opacity(0.58)))
+        .shadow(color: .black.opacity(compact ? 0.025 : 0.06), radius: compact ? 4 : 10, y: compact ? 1 : 4)
     }
 }
 

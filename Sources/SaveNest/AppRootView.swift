@@ -141,9 +141,9 @@ struct TagsView: View {
 
     private var sortPicker: some View {
         NestTabBar(selection: $sortOrder, items: [
-            (.alphabetical, "A–Z", "textformat"),
-            (.mostLinks, "Most used", "chart.bar.fill")
-        ]).frame(width: 220)
+            (.alphabetical, "A–Z", nil),
+            (.mostLinks, "Most links", nil)
+        ], compact: true).frame(width: 160)
     }
 
     @ViewBuilder private func tagRow(_ tag: TagSummary) -> some View {
