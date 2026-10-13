@@ -67,6 +67,116 @@ final class LibraryTests {
         XCTAssertNil(LinkLearning.suggest(elsewhere, examples: examples).importance)
         XCTAssertNil(LinkLearning.suggest(candidate, examples: Array(repeating: examples[0], count: 3)).importance)
     }
+    func testAutoTaggingMatchesExistingTagsConservatively() {
+        func example(_ index: Int, _ tag: String) -> SavedLink {
+            var link = SavedLink(url: "https://history\(index).test/item", title: "History \(index)")
+            link.tags = [tag]; return link
+        }
+        let examples = [
+            example(1, "Swift"), example(2, "Product Design"), example(3, "AI"),
+            example(4, "Research"), example(5, "Article"), example(6, "Design")
+        ]
+        let candidate = SavedLink(url: "https://new.test/item", title: "SWÍFT product designs with AI, reserach, and desogn")
+        let suggestions = LinkAutoTagging.suggestions(for: candidate, examples: examples, limit: 10)
+        XCTAssertTrue(suggestions.contains("Swift"))
+        XCTAssertTrue(suggestions.contains("Product Design"))
+        XCTAssertTrue(suggestions.contains("AI"))
+        XCTAssertTrue(suggestions.contains("Research"))
+        XCTAssertTrue(suggestions.contains("Design"))
+
+        let substring = SavedLink(url: "https://new.test/article", title: "An article about typography")
+        XCTAssertFalse(LinkAutoTagging.suggestions(for: substring, examples: [example(7, "Art")], limit: 10).contains("Art"))
+        let suffix = SavedLink(url: "https://new.test/designing", title: "Designing calmer software")
+        XCTAssertEqual(LinkAutoTagging.suggestions(for: suffix, examples: [example(8, "Design")]), ["Design"])
+    }
+    func testAutoTaggingLearnsTitleMappingsWithAgreement() {
+        func example(_ url: String, _ title: String, _ tags: [String]) -> SavedLink {
+            var link = SavedLink(url: url, title: title); link.tags = tags; return link
+        }
+        let examples = [
+            example("https://one.test/async", "Async task groups", ["Swift"]),
+            example("https://two.test/async", "Async streams explained", ["Swift"]),
+            example("https://three.test/async", "Async office planning", ["Work"]),
+            example("https://one.test/actor", "Actor isolation", ["Concurrency"]),
+            example("https://one.test/release", "Release checklist one", ["Shipping"]),
+            example("https://two.test/release", "Release checklist two", ["Shipping"]),
+            example("https://three.test/release", "Release checklist three", ["Work"]),
+            example("https://four.test/release", "Release checklist four", ["Product"]),
+            example("https://five.test/release", "Release checklist five", ["Operations"])
+        ]
+        XCTAssertTrue(LinkAutoTagging.suggestions(
+            for: SavedLink(url: "https://new.test/async", title: "Asnyc patterns"), examples: examples
+        ).contains("Swift"))
+        XCTAssertFalse(LinkAutoTagging.suggestions(
+            for: SavedLink(url: "https://new.test/actor", title: "Actors in practice"), examples: examples
+        ).contains("Concurrency"))
+        XCTAssertFalse(LinkAutoTagging.suggestions(
+            for: SavedLink(url: "https://new.test/release", title: "Release process"), examples: examples
+        ).contains("Shipping"))
+    }
+    func testAutoTaggingUsesDomainHistoryAndStableRanking() {
+        func example(_ url: String, _ title: String, _ tags: [String], archived: Bool = false) -> SavedLink {
+            var link = SavedLink(url: url, title: title); link.tags = tags; link.isArchived = archived; return link
+        }
+        let examples = [
+            example("https://www.example.com/one", "Focus planning", ["Productivity", "Apple"]),
+            example("https://example.com/two", "Focus routines", ["productivity", "Apple"], archived: true),
+            example("https://example.com/three", "Weekly review", ["Productivity", "Rare"]),
+            example("https://other.test/swift", "Language notes", ["Swift"])
+        ]
+        let candidate = SavedLink(url: "https://example.com/new", title: "Swift focus method")
+        let suggestions = LinkAutoTagging.suggestions(for: candidate, examples: examples)
+        XCTAssertEqual(suggestions, ["Productivity", "Apple", "Swift"])
+        XCTAssertFalse(suggestions.contains("Rare")); XCTAssertEqual(suggestions.count, 3)
+        XCTAssertEqual(LinkAutoTagging.applyingSuggestions(to: candidate, examples: examples).tags, suggestions)
+
+        var alreadyTagged = candidate
+        alreadyTagged.tags = ["Personal"]
+        XCTAssertEqual(
+            LinkAutoTagging.applyingSuggestions(to: alreadyTagged, examples: examples).tags,
+            ["Personal", "Productivity", "Apple", "Swift"]
+        )
+
+        let generic = SavedLink(url: "https://example.com/generic", title: "")
+        XCTAssertEqual(LinkAutoTagging.suggestions(for: generic, examples: examples), ["Productivity", "Apple"])
+
+        let subdomain = SavedLink(url: "https://docs.example.com/new", title: "")
+        XCTAssertEqual(LinkAutoTagging.suggestions(for: subdomain, examples: examples), [])
+
+        let duplicate = example("https://example.com/new", "Old copy", ["Productivity"])
+        XCTAssertEqual(LinkAutoTagging.suggestions(
+            for: SavedLink(url: "https://example.com/new", title: ""), examples: Array(examples.prefix(2)) + [duplicate]
+        ), [])
+
+        let tied = (1...3).map { example("https://tie.test/\($0)", "", ["Beta", "Alpha"]) }
+        XCTAssertEqual(LinkAutoTagging.suggestions(
+            for: SavedLink(url: "https://tie.test/new", title: ""), examples: tied
+        ), ["Alpha", "Beta"])
+    }
+    func testTagCompletionSelectsFirstFilteredSuggestion() {
+        func exampleTag(url: String, title: String, tags: [String]) -> SavedLink {
+            var link = SavedLink(url: url, title: title); link.tags = tags; return link
+        }
+        let suggestions = ["Research", "Design", "Product Design", "Reading"]
+        XCTAssertEqual(TagCompletion.matches(input: "des", selected: [], suggestions: suggestions), ["design", "product design"])
+        XCTAssertEqual(TagCompletion.firstMatch(input: "DES", selected: ["design"], suggestions: suggestions), "Product Design")
+        XCTAssertEqual(TagCompletion.firstMatch(input: "add", selected: [], suggestions: ["Addiction"]), "addiction")
+        XCTAssertEqual(TagCompletion.firstMatch(input: "Add", selected: [], suggestions: ["addiction"]), "Addiction")
+        XCTAssertNil(TagCompletion.firstMatch(input: "", selected: [], suggestions: suggestions))
+        XCTAssertNil(TagCompletion.firstMatch(input: "missing", selected: [], suggestions: suggestions))
+
+        XCTAssertEqual(TagCaseStyle.inferred(from: ["health", "recovery", "Work"]), .lowercase)
+        XCTAssertEqual(TagCaseStyle.inferred(from: ["Health", "Recovery", "work"]), .leadingUppercase)
+
+        let history = [
+            exampleTag(url: "https://one.test", title: "Addiction overview", tags: ["Addiction"]),
+            exampleTag(url: "https://two.test", title: "Other", tags: ["health"]),
+            exampleTag(url: "https://three.test", title: "Another", tags: ["recovery"])
+        ]
+        XCTAssertEqual(LinkAutoTagging.suggestions(
+            for: SavedLink(url: "https://new.test", title: "Addiction support"), examples: history
+        ), ["addiction"])
+    }
     func testImportanceMigrationAndBackup() throws {
         var link = SavedLink(url: "https://example.com", title: "Reference")
         var object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(link)) as! [String: Any]
@@ -246,6 +356,14 @@ final class LibraryTests {
         let tags = TagSummary.summarize([first, second])
         XCTAssertEqual(tags.count, 2); XCTAssertEqual(tags.first?.count, 2)
         XCTAssertEqual(tags.first?.id, "design")
+    }
+    func testTagSummariesSortByLinkCountWithAlphabeticalTies() {
+        var first = SavedLink(url: "https://example.com/1", title: "One"); first.tags = ["Alpha", "Work", "Design", "Article"]
+        var second = SavedLink(url: "https://example.com/2", title: "Two"); second.tags = ["Work", "Design", "Article"]
+        var third = SavedLink(url: "https://example.com/3", title: "Three"); third.tags = ["Design", "Article"]
+        let tags = TagSummary.summarize([first, second, third])
+        XCTAssertEqual(TagSummary.sorted(tags, by: .alphabetical).map(\.name), ["Alpha", "Article", "Design", "Work"])
+        XCTAssertEqual(TagSummary.sorted(tags, by: .mostLinks).map(\.name), ["Article", "Design", "Work", "Alpha"])
     }
     func testDiskRoundTripAndMissingFile() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -470,6 +588,7 @@ func XCTAssertThrowsError<T>(_ expression: @autoclosure () throws -> T) {
         tests.testSearchIncludesNotesAndCollection()
         tests.testKeywordSearchAcrossFieldsAndRanking()
         tests.testTagCountsIgnoreCaseAndDuplicateTags()
+        tests.testTagSummariesSortByLinkCountWithAlphabeticalTies()
         try tests.testDiskRoundTripAndMissingFile()
         try tests.testCorruptOrFutureLibraryThrowsWithoutChangingFile()
         tests.testDateGroupingUsesLocalDaysAndNewestFirst()
@@ -495,8 +614,12 @@ func XCTAssertThrowsError<T>(_ expression: @autoclosure () throws -> T) {
         try tests.testIconMetadataSurvivesLibraryRoundTripAndLegacySaves()
         tests.testClipboardRequiresSingleSafeURL()
         tests.testImportanceLearningRequiresEvidenceAndHonorsCorrections()
+        tests.testAutoTaggingMatchesExistingTagsConservatively()
+        tests.testAutoTaggingLearnsTitleMappingsWithAgreement()
+        tests.testAutoTaggingUsesDomainHistoryAndStableRanking()
+        tests.testTagCompletionSelectsFirstFilteredSuggestion()
         try tests.testImportanceMigrationAndBackup()
         try tests.testAnalyticsOptOutAndPayloadBoundary()
-        print("Passed 35 SaveNest checks")
+        print("Passed 40 SaveNest checks")
     }
 }

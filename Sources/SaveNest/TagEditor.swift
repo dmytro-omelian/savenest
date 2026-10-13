@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import SaveNestCore
 
@@ -6,14 +7,8 @@ struct TagEditor: View {
     @Binding var tags: [String]
     @Binding var input: String
     let suggestions: [String]
-    var initiallyFocused = false
     @FocusState private var focused: Bool
-    private var available: [String] {
-        suggestions.filter { suggestion in
-            !tags.contains { LinkSearch.folded($0) == LinkSearch.folded(suggestion) } &&
-            (input.isEmpty || suggestion.localizedCaseInsensitiveContains(input.trimmingCharacters(in: .whitespaces)))
-        }.prefix(6).map { $0 }
-    }
+    private var available: [String] { TagCompletion.matches(input: input, selected: tags, suggestions: suggestions) }
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if !tags.isEmpty {
@@ -32,6 +27,11 @@ struct TagEditor: View {
                 TextField("Add a tag…", text: $input).textFieldStyle(.plain).focused($focused)
                     .onSubmit { commitInput() }
                     .onChange(of: input) { _, value in if value.contains(",") { commitInput() } }
+                    .background(TagTabMonitor(enabled: focused) {
+                        guard let suggestion = TagCompletion.firstMatch(input: input, selected: tags, suggestions: suggestions) else { return false }
+                        addSuggestion(suggestion)
+                        return true
+                    })
                 if !input.trimmingCharacters(in: .whitespaces).isEmpty {
                     Button("Add") { commitInput() }.buttonStyle(.plain).foregroundStyle(Color.sage)
                 }
@@ -39,16 +39,61 @@ struct TagEditor: View {
             if !available.isEmpty {
                 TagFlowLayout(spacing: 7) {
                     ForEach(available, id: \.self) { suggestion in
-                        Button { tags = SavedLink.normalizedTags(tags + [suggestion]); input = ""; focused = true } label: {
+                        Button { addSuggestion(suggestion) } label: {
                             Text("+ " + suggestion).font(.system(size: 11)).padding(.vertical, 3)
                         }.buttonStyle(.plain).foregroundStyle(Color.muted).help("Add existing tag \(suggestion)")
                     }
                 }
             }
-            Text("Return or comma to add · click a tag to remove").font(.system(size: 10)).foregroundStyle(Color.muted)
-        }.onAppear { focused = initiallyFocused }
+            Text("Tab accepts the first suggestion · Return or comma adds · click a tag to remove").font(.system(size: 10)).foregroundStyle(Color.muted)
+        }
     }
+    private func addSuggestion(_ suggestion: String) { tags = SavedLink.normalizedTags(tags + [suggestion]); input = ""; focused = true }
     private func commitInput() { tags = SavedLink.normalizedTags(tags + SavedLink.parseTags(input)); input = "" }
+}
+
+/// SwiftUI's TextField consumes Tab for focus traversal before `onKeyPress` runs on macOS.
+/// A scoped AppKit monitor gets first refusal while this tag field owns focus.
+private struct TagTabMonitor: NSViewRepresentable {
+    let enabled: Bool
+    let onTab: () -> Bool
+
+    func makeCoordinator() -> Coordinator { Coordinator(enabled: enabled, onTab: onTab) }
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        context.coordinator.start()
+        return view
+    }
+    func updateNSView(_ view: NSView, context: Context) {
+        context.coordinator.enabled = enabled
+        context.coordinator.onTab = onTab
+    }
+    static func dismantleNSView(_ view: NSView, coordinator: Coordinator) { coordinator.stop() }
+
+    final class Coordinator {
+        var enabled: Bool
+        var onTab: () -> Bool
+        private var monitor: Any?
+
+        init(enabled: Bool, onTab: @escaping () -> Bool) {
+            self.enabled = enabled
+            self.onTab = onTab
+        }
+        func start() {
+            guard monitor == nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self, enabled, event.keyCode == 48 else { return event }
+                let disallowed = event.modifierFlags.intersection([.command, .control, .option, .shift])
+                guard disallowed.isEmpty else { return event }
+                return onTab() ? nil : event
+            }
+        }
+        func stop() {
+            if let monitor { NSEvent.removeMonitor(monitor) }
+            monitor = nil
+        }
+        deinit { stop() }
+    }
 }
 
 struct TagFlowLayout: Layout {

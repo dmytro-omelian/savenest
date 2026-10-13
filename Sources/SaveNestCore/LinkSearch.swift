@@ -43,4 +43,16 @@ public struct TagSummary: Identifiable, Equatable {
         }
         return values.values.map { TagSummary(name: $0.0, count: $0.1) }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
+
+    public static func sorted(_ tags: [TagSummary], by order: TagSummarySortOrder) -> [TagSummary] {
+        tags.sorted { first, second in
+            if order == .mostLinks, first.count != second.count { return first.count > second.count }
+            return first.name.localizedStandardCompare(second.name) == .orderedAscending
+        }
+    }
+}
+
+public enum TagSummarySortOrder: String, CaseIterable {
+    case alphabetical
+    case mostLinks
 }
