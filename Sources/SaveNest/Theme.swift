@@ -101,66 +101,6 @@ struct QuietButton: ButtonStyle {
     }
 }
 
-struct NestTabBar<Selection: Hashable>: View {
-    @Binding var selection: Selection
-    let items: [(value: Selection, title: String, icon: String?)]
-    var compact = false
-    @Namespace private var activeTab
-
-    var body: some View {
-        HStack(spacing: compact ? 2 : 5) {
-            ForEach(items.indices, id: \.self) { index in
-                let item = items[index]
-                let selected = selection == item.value
-                Button {
-                    withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
-                        selection = item.value
-                    }
-                } label: {
-                    HStack(spacing: 7) {
-                        if let icon = item.icon {
-                            Image(systemName: icon)
-                                .font(.system(size: compact ? 10 : 11, weight: .semibold))
-                                .foregroundStyle(selected ? Color.sage : Color.muted)
-                        }
-                        Text(item.title)
-                            .font(.system(size: compact ? 11 : 12, weight: compact ? .medium : .semibold))
-                            .foregroundStyle(selected ? Color.ink : Color.muted)
-                            .lineLimit(1)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.horizontal, compact ? 8 : 12)
-                    .padding(.vertical, compact ? 6 : 9)
-                    .background {
-                        if selected {
-                            RoundedRectangle(cornerRadius: compact ? 7 : 10, style: .continuous)
-                                .fill(.regularMaterial)
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: compact ? 7 : 10, style: .continuous)
-                                        .strokeBorder(LinearGradient(
-                                            colors: [Color.white.opacity(0.42), Color.line.opacity(0.7)],
-                                            startPoint: .top,
-                                            endPoint: .bottom
-                                        ))
-                                }
-                                .matchedGeometryEffect(id: "active-tab", in: activeTab)
-                                .shadow(color: .black.opacity(compact ? 0.08 : 0.12), radius: compact ? 3 : 6, y: compact ? 1 : 2)
-                        }
-                    }
-                    .contentShape(RoundedRectangle(cornerRadius: compact ? 7 : 10, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(item.title)
-                .accessibilityAddTraits(selected ? .isSelected : [])
-            }
-        }
-        .padding(compact ? 3 : 4)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: compact ? 10 : 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: compact ? 10 : 14, style: .continuous).strokeBorder(Color.line.opacity(0.58)))
-        .shadow(color: .black.opacity(compact ? 0.025 : 0.06), radius: compact ? 4 : 10, y: compact ? 1 : 4)
-    }
-}
-
 struct DomainIcon: View {
     @Environment(\.colorScheme) private var colorScheme
     let domain: String

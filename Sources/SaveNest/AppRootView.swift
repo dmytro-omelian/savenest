@@ -140,10 +140,25 @@ struct TagsView: View {
     }
 
     private var sortPicker: some View {
-        NestTabBar(selection: $sortOrder, items: [
-            (.alphabetical, "A–Z", nil),
-            (.mostLinks, "Most links", nil)
-        ], compact: true).frame(width: 160)
+        Menu {
+            Button { sortOrder = .alphabetical } label: {
+                if sortOrder == .alphabetical { Label("Alphabetical", systemImage: "checkmark") }
+                else { Text("Alphabetical") }
+            }
+            Button { sortOrder = .mostLinks } label: {
+                if sortOrder == .mostLinks { Label("Most links", systemImage: "checkmark") }
+                else { Text("Most links") }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.up.arrow.down").font(.system(size: 10, weight: .semibold)).foregroundStyle(Color.sage)
+                Text(sortOrder == .alphabetical ? "Alphabetical" : "Most links").font(.system(size: 11, weight: .medium)).foregroundStyle(Color.ink)
+                Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold)).foregroundStyle(Color.muted)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 7)
+            .background(Color.surface, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Color.line.opacity(0.65)))
+        }.menuStyle(.borderlessButton).fixedSize().help("Sort tags")
     }
 
     @ViewBuilder private func tagRow(_ tag: TagSummary) -> some View {
