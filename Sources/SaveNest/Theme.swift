@@ -100,6 +100,54 @@ struct QuietButton: ButtonStyle {
             .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.line.opacity(0.75)))
     }
 }
+
+struct NestTabBar<Selection: Hashable>: View {
+    @Binding var selection: Selection
+    let items: [(value: Selection, title: String, icon: String?)]
+    @Namespace private var activeTab
+
+    var body: some View {
+        HStack(spacing: 5) {
+            ForEach(items.indices, id: \.self) { index in
+                let item = items[index]
+                let selected = selection == item.value
+                Button {
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                        selection = item.value
+                    }
+                } label: {
+                    HStack(spacing: 7) {
+                        if let icon = item.icon {
+                            Image(systemName: icon).font(.system(size: 11, weight: .semibold))
+                        }
+                        Text(item.title).font(.system(size: 12, weight: .semibold))
+                    }
+                    .foregroundStyle(selected ? Color.onAccent : Color.muted)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .background {
+                        if selected {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(LinearGradient(colors: [Color.sage, Color.sage.opacity(0.82)], startPoint: .top, endPoint: .bottom))
+                                .matchedGeometryEffect(id: "active-tab", in: activeTab)
+                                .shadow(color: Color.sage.opacity(0.28), radius: 7, y: 3)
+                        }
+                    }
+                    .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(item.title)
+                .accessibilityAddTraits(selected ? .isSelected : [])
+            }
+        }
+        .padding(4)
+        .background(Color.surface.opacity(0.92), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.line.opacity(0.72)))
+        .shadow(color: .black.opacity(0.06), radius: 10, y: 4)
+    }
+}
+
 struct DomainIcon: View {
     @Environment(\.colorScheme) private var colorScheme
     let domain: String
