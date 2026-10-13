@@ -95,8 +95,8 @@ struct SwipeableLink<Content: View>: View {
             origin = nil
             switch RowSwipe.finish(offset: offset, cancelled: cancelled) {
             case .archive: archive()
-            case .archiveButton: withAnimation(.easeOut(duration: 0.18)) { offset = link.isArchived ? -72 : -144 }
-            case .shareButtons: withAnimation(.easeOut(duration: 0.18)) { offset = 144 }
+            case .archiveButton: withAnimation(.easeOut(duration: 0.18)) { offset = link.isArchived ? -82 : -156 }
+            case .shareButtons: withAnimation(.easeOut(duration: 0.18)) { offset = 156 }
             case .closed: close()
             }
         }))
@@ -132,7 +132,7 @@ private struct SwipeActionButton: View {
                     .background(color.opacity(hovered ? 0.17 : 0.11), in: Capsule())
                 Text(title).font(.system(size: 9, weight: .semibold)).foregroundStyle(Color.ink.opacity(0.82))
             }
-            .frame(width: 58).frame(maxHeight: .infinity)
+            .frame(width: hovered ? 70 : 58).frame(maxHeight: .infinity)
             .background(hovered ? Color.raised : Color.raised.opacity(0.96), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(hovered ? color.opacity(0.24) : Color.line.opacity(0.65)))
             .shadow(color: .black.opacity(hovered ? 0.08 : 0.045), radius: hovered ? 5 : 3, y: hovered ? 2 : 1)
