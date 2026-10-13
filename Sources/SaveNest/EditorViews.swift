@@ -147,6 +147,7 @@ struct SettingsView: View {
     @AppStorage(AppAppearance.preferenceKey) private var appearance = AppAppearance.black.rawValue
     @State private var archiveIDs: Set<UUID>?
     @State private var selectedTab = SettingsTab.general
+    @State private var tabMoveEdge = Edge.trailing
     var onBack: () -> Void = {}
     var body: some View {
         ScrollView { VStack(alignment: .leading, spacing: 26) {
@@ -155,7 +156,16 @@ struct SettingsView: View {
             sheetHeading("Make yourself at home.", subtitle: "A few small things, just how you like them.")
             if let error = model.error { Text(error).font(.system(size: 11)).foregroundStyle(.red) }
             settingsTabs
-            settingsContent.id(selectedTab).transition(.opacity.combined(with: .move(edge: .top)))
+            ZStack(alignment: .topLeading) {
+                VStack(alignment: .leading, spacing: 16) { settingsContent }
+                    .id(selectedTab)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .move(edge: tabMoveEdge)),
+                        removal: .opacity.combined(with: .move(edge: tabMoveEdge == .trailing ? .leading : .trailing))
+                    ))
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .clipped()
             HStack { NestMark().frame(width: 20, height: 20); Text("SaveNest " + (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "development")); Spacer(); Text("A small app for a clearer mind.") }.font(.system(size: 10)).foregroundStyle(Color.muted)
         }.padding(32) }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -177,7 +187,7 @@ struct SettingsView: View {
             ForEach(SettingsTab.allCases) { tab in
                 let selected = selectedTab == tab
                 Button {
-                    withAnimation(.easeOut(duration: 0.18)) { selectedTab = tab }
+                    select(tab)
                 } label: {
                     HStack(spacing: 9) {
                         Image(systemName: tab.icon)
@@ -202,6 +212,15 @@ struct SettingsView: View {
                 .accessibilityAddTraits(selected ? .isSelected : [])
             }
         }
+    }
+
+    private func select(_ tab: SettingsTab) {
+        guard tab != selectedTab else { return }
+        let tabs = SettingsTab.allCases
+        let current = tabs.firstIndex(of: selectedTab) ?? 0
+        let next = tabs.firstIndex(of: tab) ?? current
+        tabMoveEdge = next > current ? .trailing : .leading
+        withAnimation(.easeInOut(duration: 0.24)) { selectedTab = tab }
     }
 
     @ViewBuilder private var settingsContent: some View {

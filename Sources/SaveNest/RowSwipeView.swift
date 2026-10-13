@@ -108,23 +108,40 @@ struct SwipeableLink<Content: View>: View {
         .accessibilityAction(named: Text("Share by email")) { model.share(link) }
     }
     private func action(_ title: String, icon: String, color: Color, run: @escaping () -> Void) -> some View {
+        SwipeActionButton(title: title, icon: icon, color: color, run: run)
+    }
+    private func close() { origin = nil; withAnimation(.easeOut(duration: 0.18)) { offset = 0 } }
+    private func archive() { close(); withAnimation(.easeOut(duration: 0.18)) { _ = model.archive(link) } }
+    private func delete() { close(); withAnimation(.easeOut(duration: 0.18)) { model.delete(link) } }
+}
+
+private struct SwipeActionButton: View {
+    let title: String
+    let icon: String
+    let color: Color
+    let run: () -> Void
+    @State private var hovered = false
+
+    var body: some View {
         Button(action: run) {
             VStack(spacing: 5) {
                 Image(systemName: icon)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(color)
-                    .frame(width: 26, height: 26)
-                    .background(color.opacity(0.11), in: Circle())
+                    .frame(width: hovered ? 34 : 26, height: 26)
+                    .background(color.opacity(hovered ? 0.17 : 0.11), in: Capsule())
                 Text(title).font(.system(size: 9, weight: .semibold)).foregroundStyle(Color.ink.opacity(0.82))
             }
             .frame(width: 58).frame(maxHeight: .infinity)
-            .background(Color.raised.opacity(0.96), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(Color.line.opacity(0.65)))
-            .shadow(color: .black.opacity(0.045), radius: 3, y: 1)
+            .background(hovered ? Color.raised : Color.raised.opacity(0.96), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(hovered ? color.opacity(0.24) : Color.line.opacity(0.65)))
+            .shadow(color: .black.opacity(hovered ? 0.08 : 0.045), radius: hovered ? 5 : 3, y: hovered ? 2 : 1)
             .contentShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-        }.buttonStyle(.plain).accessibilityLabel(title)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .onHover { inside in
+            withAnimation(.easeOut(duration: 0.16)) { hovered = inside }
+        }
     }
-    private func close() { origin = nil; withAnimation(.easeOut(duration: 0.18)) { offset = 0 } }
-    private func archive() { close(); withAnimation(.easeOut(duration: 0.18)) { _ = model.archive(link) } }
-    private func delete() { close(); withAnimation(.easeOut(duration: 0.18)) { model.delete(link) } }
 }
