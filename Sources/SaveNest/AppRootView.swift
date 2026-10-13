@@ -140,13 +140,10 @@ struct TagsView: View {
     }
 
     private var sortPicker: some View {
-        Picker("Sort tags", selection: $sortOrder) {
-            Text("Alphabetical").tag(TagSummarySortOrder.alphabetical)
-            Text("Most links").tag(TagSummarySortOrder.mostLinks)
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .frame(width: 190)
+        NestTabBar(selection: $sortOrder, items: [
+            (.alphabetical, "A–Z", "textformat"),
+            (.mostLinks, "Most used", "chart.bar.fill")
+        ]).frame(width: 220)
     }
 
     @ViewBuilder private func tagRow(_ tag: TagSummary) -> some View {

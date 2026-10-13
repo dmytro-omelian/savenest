@@ -147,10 +147,12 @@ struct SettingsView: View {
                 .buttonStyle(.plain).font(.system(size: 12, weight: .medium)).foregroundStyle(Color.muted)
             sheetHeading("Make yourself at home.", subtitle: "A few small things, just how you like them.")
             if let error = model.error { Text(error).font(.system(size: 11)).foregroundStyle(.red) }
-            Picker("Settings section", selection: $selectedTab) {
-                ForEach(SettingsTab.allCases) { tab in Text(tab.rawValue).tag(tab) }
-            }.pickerStyle(.segmented).labelsHidden()
-            settingsContent
+            NestTabBar(selection: $selectedTab, items: [
+                (.general, "General", "sparkles"),
+                (.capture, "Capture", "command"),
+                (.library, "Library", "tray.full")
+            ])
+            settingsContent.id(selectedTab).transition(.opacity.combined(with: .move(edge: .top)))
             HStack { NestMark().frame(width: 20, height: 20); Text("SaveNest " + (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "development")); Spacer(); Text("A small app for a clearer mind.") }.font(.system(size: 10)).foregroundStyle(Color.muted)
         }.padding(32) }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
