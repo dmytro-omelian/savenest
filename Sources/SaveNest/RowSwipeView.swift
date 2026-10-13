@@ -70,7 +70,7 @@ struct SwipeableLink<Content: View>: View {
         // Background actions never participate in sizing: the original compact row owns its height.
         content().background(Color.surface).offset(x: offset)
         .background {
-            HStack(spacing: 0) {
+            HStack(spacing: 6) {
                 if offset > 0 {
                     action("Email", icon: "envelope", color: .sage) { close(); model.share(link) }
                     action("Copy", icon: "link", color: .muted) { close(); model.copy(link) }
@@ -82,7 +82,8 @@ struct SwipeableLink<Content: View>: View {
                     }
                     action(link.isArchived ? "Restore" : "Archive", icon: link.isArchived ? "arrow.uturn.backward" : "archivebox", color: .sage) { archive() }
                 }
-            }
+            }.padding(.horizontal, 6).padding(.vertical, 5)
+                .background(Color.sidebar.opacity(0.22))
         }
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .contentShape(Rectangle())
@@ -108,8 +109,19 @@ struct SwipeableLink<Content: View>: View {
     }
     private func action(_ title: String, icon: String, color: Color, run: @escaping () -> Void) -> some View {
         Button(action: run) {
-            VStack(spacing: 7) { Image(systemName: icon).font(.system(size: 16)); Text(title).font(.system(size: 10, weight: .medium)) }
-                .frame(width: 72).frame(maxHeight: .infinity).foregroundStyle(color).background(color.opacity(0.10)).contentShape(Rectangle())
+            VStack(spacing: 5) {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(color)
+                    .frame(width: 26, height: 26)
+                    .background(color.opacity(0.11), in: Circle())
+                Text(title).font(.system(size: 9, weight: .semibold)).foregroundStyle(Color.ink.opacity(0.82))
+            }
+            .frame(width: 58).frame(maxHeight: .infinity)
+            .background(Color.raised.opacity(0.96), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(Color.line.opacity(0.65)))
+            .shadow(color: .black.opacity(0.045), radius: 3, y: 1)
+            .contentShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
         }.buttonStyle(.plain).accessibilityLabel(title)
     }
     private func close() { origin = nil; withAnimation(.easeOut(duration: 0.18)) { offset = 0 } }
