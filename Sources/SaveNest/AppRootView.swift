@@ -11,7 +11,6 @@ struct AppRootView: View {
                 switch model.section {
                 case .library: LibraryView(model: model)
                 case .tags: TagsView(model: model)
-                case .review: ImportanceReviewView(model: model)
                 case .account: AccountView(account: model.account) { model.section = .library }
                 case .settings: SettingsView(model: model) { model.section = .library }
                 }
@@ -39,7 +38,7 @@ struct AppRootView: View {
             VStack(spacing: 5) {
                 railButton("Library", icon: "tray", selected: model.section == .library) { model.section = .library }
                 railButton("Tags", icon: "number", selected: model.section == .tags) { model.section = .tags }
-                railButton("Review importance", icon: "checklist", selected: model.section == .review) { model.section = .review }
+                railButton("Review importance", icon: "checklist", enabled: false) {}
                 Rectangle().fill(Color.line).frame(width: 24, height: 1).padding(.vertical, 5)
                 railButton("Search open tabs", icon: "rectangle.on.rectangle") { model.showTabSearch?() }
                 railButton("Add a link", icon: "plus") { model.section = .library; model.presentAdd() }
@@ -56,14 +55,14 @@ struct AppRootView: View {
             .background(Color.sidebar.opacity(0.35))
     }
 
-    private func railButton(_ title: String, icon: String, selected: Bool = false, action: @escaping () -> Void) -> some View {
+    private func railButton(_ title: String, icon: String, selected: Bool = false, enabled: Bool = true, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon).font(.system(size: 17, weight: .medium))
                 .foregroundStyle(selected ? Color.sage : Color.muted)
                 .frame(width: 38, height: 38)
                 .background(selected ? Color.sage.opacity(0.14) : .clear, in: Circle())
                 .contentShape(Circle())
-        }.buttonStyle(.plain).help(title).accessibilityLabel(title)
+        }.buttonStyle(.plain).disabled(!enabled).opacity(enabled ? 1 : 0.4).help(title).accessibilityLabel(title)
             .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
@@ -73,7 +72,6 @@ private extension AppModel {
         switch section {
         case .library: "library"
         case .tags: "tags"
-        case .review: "review"
         case .account: "account"
         case .settings: "settings"
         }
@@ -82,9 +80,14 @@ private extension AppModel {
 
 struct TagsView: View {
     @ObservedObject var model: AppModel
+    @AppStorage("tagSummarySortOrder") private var sortOrder = TagSummarySortOrder.alphabetical
     @State private var editingTag: String?
     @State private var draft = ""
     @State private var deletingTag: TagSummary?
+
+    private var sortedTags: [TagSummary] {
+        TagSummary.sorted(model.allTagSummaries, by: sortOrder)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -102,7 +105,12 @@ struct TagsView: View {
                 Text("Keep your library easy to browse.").font(.system(size: 25, weight: .semibold)).tracking(-0.6)
                 Text("Rename or remove tags everywhere they appear. Select a tag to see matching links.")
                     .font(.system(size: 12)).foregroundStyle(Color.muted)
-            }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 34).padding(.bottom, 22)
+                HStack(spacing: 8) {
+                    Spacer()
+                    Text("SORT BY").font(.system(size: 9, weight: .semibold)).tracking(1).foregroundStyle(Color.muted)
+                    sortPicker
+                }.frame(maxWidth: .infinity)
+            }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 34).padding(.bottom, 14)
 
             if model.allTagSummaries.isEmpty {
                 VStack(spacing: 10) {
@@ -113,7 +121,7 @@ struct TagsView: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 8) {
-                        ForEach(model.allTagSummaries) { tag in
+                        ForEach(sortedTags) { tag in
                             tagRow(tag)
                         }
                     }.padding(.horizontal, 34).padding(.bottom, 30)
@@ -129,6 +137,16 @@ struct TagsView: View {
         } message: { tag in
             Text("The links will stay in your library. Only this tag will be removed from \(tag.count) \(tag.count == 1 ? "link" : "links").")
         }
+    }
+
+    private var sortPicker: some View {
+        Picker("Sort tags", selection: $sortOrder) {
+            Text("Alphabetical").tag(TagSummarySortOrder.alphabetical)
+            Text("Most links").tag(TagSummarySortOrder.mostLinks)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .frame(width: 190)
     }
 
     @ViewBuilder private func tagRow(_ tag: TagSummary) -> some View {

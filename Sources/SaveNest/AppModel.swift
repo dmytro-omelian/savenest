@@ -30,7 +30,7 @@ struct TabCleanupDraft: Identifiable {
     init(tabs: [BrowserTabSnapshot]) { self.tabs = tabs; selected = Set(tabs.map(\.id)) }
 }
 
-enum AppSection { case library, tags, review, account, settings }
+enum AppSection { case library, tags, account, settings }
 
 enum AppLaunch {
     static var isPreview: Bool {
@@ -64,6 +64,9 @@ final class AppModel: ObservableObject {
     }
     @Published var learningEnabled = UserDefaults.standard.object(forKey: "learningEnabled") as? Bool ?? true {
         didSet { if !isPreview { UserDefaults.standard.set(learningEnabled, forKey: "learningEnabled") } }
+    }
+    @Published var autoTaggingEnabled = UserDefaults.standard.object(forKey: "autoTaggingEnabled") as? Bool ?? true {
+        didSet { if !isPreview { UserDefaults.standard.set(autoTaggingEnabled, forKey: "autoTaggingEnabled") } }
     }
     var dismissClipboardNotice: (() -> Void)?
 
@@ -140,15 +143,6 @@ final class AppModel: ObservableObject {
         shortcuts = Dictionary(uniqueKeysWithValues: CaptureAction.allCases.map { action in
             (action, stored[action.rawValue] ?? (action == .quick ? legacy : nil) ?? action.defaultShortcut)
         })
-        if shortcuts[.quick] == CaptureAction.quick.memorableShortcut,
-           shortcuts[.note] == CaptureAction.note.memorableShortcut,
-           shortcuts[.tags] == CaptureShortcut.legacyTagsPreset {
-            shortcuts[.tags] = CaptureAction.tags.memorableShortcut
-            if !isPreview {
-                let migrated = Dictionary(uniqueKeysWithValues: shortcuts.map { ($0.key.rawValue, $0.value) })
-                UserDefaults.standard.set(try? JSONEncoder().encode(migrated), forKey: "captureShortcuts")
-            }
-        }
         tabSearch.save = { [weak self] tab in
             guard let self else { return false }
             return await self.saveOpenTab(tab)
@@ -265,7 +259,7 @@ final class AppModel: ObservableObject {
         if let draft { showCaptureEditor?(draft); return }
         guard !isCapturing else { return }
         isCapturing = true
-        let shouldClose = [.quick, .note, .tags].contains(action) && closeAfterQuickSave
+        let shouldClose = [.quick, .note].contains(action) && closeAfterQuickSave
         Task { @MainActor in
             defer { isCapturing = false }
             guard await authorizeSaving() else { return }
@@ -283,7 +277,7 @@ final class AppModel: ObservableObject {
                     showTabSelection?(selection)
                     return
                 }
-                if action == .note || action == .tags, var link = links.first {
+                if action == .note, var link = links.first {
                     if let existing = library.links.first(where: { Library.identity($0.url) == Library.identity(link.url) }) {
                         let improved = link.title
                         let iconURL = link.iconURL
@@ -294,7 +288,7 @@ final class AppModel: ObservableObject {
                     beginDraft(link, action: action, closeTarget: captured.closeTarget)
                     return
                 }
-                let saved = saveCaptured(links)
+                let saved = saveCaptured(links, autoTag: action == .quick)
                 if saved && shouldClose {
                     let closed: Bool
                     if let target = captured.closeTarget { closed = await captureService.closeSavedTab(target) }
@@ -315,16 +309,21 @@ final class AppModel: ObservableObject {
         }
         // Save the selected search result, irrespective of which browser has focus.
         let link = SavedLink(url: url.absoluteString, title: LinkTitle.best(url: tab.url, browserTitle: tab.title, metadata: [:]), browser: tab.browserName)
-        return saveCaptured([link])
+        return saveCaptured([link], autoTag: true)
     }
-    @discardableResult private func saveCaptured(_ links: [SavedLink]) -> Bool {
+    @discardableResult private func saveCaptured(_ links: [SavedLink], autoTag: Bool = false) -> Bool {
+        let prepared = links.map { link in
+            guard autoTaggingEnabled, autoTag, links.count == 1,
+                  !library.links.contains(where: { Library.identity($0.url) == Library.identity(link.url) }) else { return link }
+            return LinkAutoTagging.applyingSuggestions(to: link, examples: library.links)
+        }
         var next = library
-        for link in links {
+        for link in prepared {
             if let iconURL = link.iconURL, let index = next.links.firstIndex(where: { Library.identity($0.url) == Library.identity(link.url) }) { next.links[index].iconURL = iconURL }
             if let index = next.links.firstIndex(where: { Library.identity($0.url) == Library.identity(link.url) }),
                LinkTitle.isGeneric(next.links[index].title), !LinkTitle.isGeneric(link.title) { next.links[index].title = link.title }
         }
-        let added = next.insert(links)
+        let added = next.insert(prepared)
         guard commit(next, captureFeedback: true) else { return false }
         analytics.record(.linksSaved, count: added)
         let title = added == 0 ? "Already saved" : (added == 1 ? "Tab saved" : "\(added) tabs saved")
@@ -480,6 +479,11 @@ final class AppModel: ObservableObject {
     }
     func beginDraft(_ link: SavedLink, action: CaptureAction, closeTarget: CapturedTabTarget? = nil) {
         if let draft { showCaptureEditor?(draft); return }
+        var link = link
+        let isNew = !library.links.contains { Library.identity($0.url) == Library.identity(link.url) }
+        if autoTaggingEnabled, action == .note, isNew {
+            link = LinkAutoTagging.applyingSuggestions(to: link, examples: library.links)
+        }
         let draft = CaptureDraft(link: link, action: action, closeTarget: closeTarget)
         self.draft = draft; showCaptureEditor?(draft)
     }
@@ -554,7 +558,7 @@ final class AppModel: ObservableObject {
                 beginDraft(existing ?? link, action: .note)
             } else {
                 let isNew = !library.links.contains { Library.identity($0.url) == Library.identity(link.url) }
-                if saveCaptured([link]) && isNew { analytics.record(.clipboardSaved) }
+                if saveCaptured([link], autoTag: true) && isNew { analytics.record(.clipboardSaved) }
             }
         }
     }
@@ -581,7 +585,7 @@ final class AppModel: ObservableObject {
     func applyMemorableShortcuts() {
         let previous = shortcuts
         var candidate = shortcuts
-        for action in [CaptureAction.quick, .note, .tags] { candidate[action] = action.memorableShortcut }
+        for action in [CaptureAction.quick, .note] { candidate[action] = action.memorableShortcut }
         let all = Array(candidate.values)
         guard Set(all.map { "\($0.keyCode):\($0.modifiers)" }).count == all.count else {
             error = "The preset conflicts with another SaveNest shortcut. Change that shortcut first."; return

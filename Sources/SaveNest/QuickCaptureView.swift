@@ -17,14 +17,15 @@ struct QuickCaptureView: View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 8) {
                 NestMark().frame(width: 24, height: 24)
-                Text(draft.action == .note ? "Save with a note" : "Save with tags").font(.system(size: 17, weight: .medium))
+                Text("Save with a note").font(.system(size: 17, weight: .medium))
                 Spacer()
             }
             VStack(alignment: .leading, spacing: 6) {
                 TextField("Link title", text: $link.title).textFieldStyle(.plain).font(.system(size: 14, weight: .medium))
                 Text(link.domain).font(.system(size: 11)).foregroundStyle(Color.muted)
             }.padding(14).frame(maxWidth: .infinity, alignment: .leading).nestSurface()
-            if draft.action == .tags { tagsField; noteField } else { noteField; tagsField }
+            noteField
+            tagsField
             HStack {
                 Text("⌘↵ to save · Esc to cancel").font(.system(size: 10)).foregroundStyle(Color.muted)
                 Spacer()
@@ -36,20 +37,20 @@ struct QuickCaptureView: View {
                 }.buttonStyle(SageButton()).keyboardShortcut(.return, modifiers: .command).disabled(saving)
             }
         }.padding(24).frame(width: 460).background(Color.paper).foregroundStyle(Color.ink).nestAppearance()
-            .onAppear { if draft.action == .note { focus = .note } }
+            .onAppear { focus = .note }
     }
     private var noteField: some View {
         VStack(alignment: .leading, spacing: 7) {
             fieldLabel("NOTE")
             TextEditor(text: $link.note).focused($focus, equals: .note).font(.system(size: 13))
-                .scrollContentBackground(.hidden).padding(8).frame(height: draft.action == .note ? 100 : 65)
+                .scrollContentBackground(.hidden).padding(8).frame(height: 100)
                 .nestSurface(radius: 10)
         }
     }
     private var tagsField: some View {
         VStack(alignment: .leading, spacing: 7) {
             fieldLabel("TAGS")
-            TagEditor(tags: $link.tags, input: $tags, suggestions: model.allTags, initiallyFocused: draft.action == .tags)
+            TagEditor(tags: $link.tags, input: $tags, suggestions: model.allTags)
         }
     }
 }

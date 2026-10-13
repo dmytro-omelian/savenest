@@ -106,28 +106,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc private func captureWindow() { model.capture(action: .window) }
     @objc private func captureSelected() { model.capture(action: .selected) }
     @objc private func captureNote() { model.capture(action: .note) }
-    @objc private func captureTags() { model.capture(action: .tags) }
     @objc private func closeDuplicateTabs() { model.closeDuplicateTabs() }
     @objc private func cleanUpTabs() { model.runTabCleanup() }
     @objc private func saveClipboard() { model.saveCurrentClipboard() }
     private func openCaptureEditor(_ draft: CaptureDraft) {
         if editorDraftID == draft.id, let captureEditor {
-            captureEditor.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); return
+            captureEditor.makeKeyAndOrderFront(nil); return
         }
-        let front = NSWorkspace.shared.frontmostApplication
-        returnToApp = front?.bundleIdentifier == Bundle.main.bundleIdentifier ? nil : front
-        let panel = NSPanel(contentRect: .zero, styleMask: [.titled, .closable, .utilityWindow], backing: .buffered, defer: false)
+        let panel = CaptureEditorPanel(contentRect: .zero, styleMask: [.titled, .closable, .utilityWindow, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.title = draft.action.title; panel.isReleasedWhenClosed = false; panel.delegate = self
         panel.level = .floating; panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         let content = NSHostingView(rootView: QuickCaptureView(model: model, draft: draft))
         panel.contentView = content; panel.setContentSize(content.fittingSize)
         panel.center(); captureEditor = panel; editorDraftID = draft.id
-        panel.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+        // Match open-tab search: take keyboard focus without raising the library.
+        panel.makeKeyAndOrderFront(nil)
     }
     private func closeCaptureEditor() {
         captureEditor?.orderOut(nil); captureEditor = nil; editorDraftID = nil
-        if NSApp.isActive { returnToApp?.activate(options: []) }; returnToApp = nil
     }
     private func openTabSelection(_ draft: TabSelectionDraft) {
         if tabSelectionDraftID == draft.id, let tabSelectionPanel { tabSelectionPanel.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); return }
@@ -170,7 +167,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         menu.addItem(item("Save current tab", #selector(captureTab)))
         menu.addItem(item("Save copied link", #selector(saveClipboard)))
         menu.addItem(item("Save with a note…", #selector(captureNote)))
-        menu.addItem(item("Save with tags…", #selector(captureTags)))
         menu.addItem(item("Save selected tabs…", #selector(captureSelected)))
         menu.addItem(item("Save all tabs in this window", #selector(captureWindow)))
         menu.addItem(item("Add a link…", #selector(addLink)))
@@ -192,7 +188,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         file.addItem(item("Clean Up Tabs…", #selector(cleanUpTabs)))
         file.addItem(item("Save Copied Link", #selector(saveClipboard)))
         file.addItem(item("Add Link…", #selector(addLink), key: "n")); file.addItem(item("Open Library", #selector(openLibrary), key: "0"))
-        file.addItem(.separator()); file.addItem(item("Save Current Browser Tab", #selector(captureTab))); file.addItem(item("Save with a Note…", #selector(captureNote))); file.addItem(item("Save with Tags…", #selector(captureTags))); file.addItem(item("Save Selected Tabs…", #selector(captureSelected))); file.addItem(item("Save Browser Window", #selector(captureWindow)))
+        file.addItem(.separator()); file.addItem(item("Save Current Browser Tab", #selector(captureTab))); file.addItem(item("Save with a Note…", #selector(captureNote))); file.addItem(item("Save Selected Tabs…", #selector(captureSelected))); file.addItem(item("Save Browser Window", #selector(captureWindow)))
         file.addItem(.separator()); file.addItem(item("Import Backup…", #selector(importLibrary))); file.addItem(item("Export Backup…", #selector(exportLibrary)))
         file.addItem(.separator()); file.addItem(NSMenuItem(title: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w"))
         let fileRoot = NSMenuItem(title: "File", action: nil, keyEquivalent: ""); fileRoot.submenu = file; main.addItem(fileRoot)
@@ -245,4 +241,9 @@ private final class TabSearchPanel: NSPanel {
         super.resignKey()
         orderOut(nil)
     }
+}
+
+private final class CaptureEditorPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
 }

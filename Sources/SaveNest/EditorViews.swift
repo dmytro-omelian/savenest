@@ -132,8 +132,6 @@ struct SettingsView: View {
     @ObservedObject var model: AppModel
     @AppStorage(AppAppearance.preferenceKey) private var appearance = AppAppearance.black.rawValue
     @State private var archiveIDs: Set<UUID>?
-    @State private var confirmResetLearning = false
-    @State private var showingCleanupWebsites = false
     var onBack: () -> Void = {}
     var body: some View {
         ScrollView { VStack(alignment: .leading, spacing: 26) {
@@ -152,14 +150,10 @@ struct SettingsView: View {
                     .buttonStyle(.link).font(.system(size: 11))
             }.padding(20).nestSurface()
             VStack(alignment: .leading, spacing: 12) {
-                fieldLabel("LEARN WHAT MATTERS")
-                Toggle("Suggest importance from my choices", isOn: $model.learningEnabled)
-                Text("Label links Important or Not needed in Review. Suggestions learn from links with similar websites and tags. Notes and favorites count as reasons to keep a link. Nothing is automatically archived or closed, and feedback never leaves your library.")
+                fieldLabel("AUTO-TAGGING")
+                Toggle("Suggest tags when saving links", isOn: $model.autoTaggingEnabled)
+                Text("Uses patterns from titles, websites, and tags already in your library. Suggestions stay on this Mac and use only your existing tags. Turn this off to save new links without automatic tags.")
                     .font(.system(size: 11)).foregroundStyle(Color.muted).fixedSize(horizontal: false, vertical: true)
-                HStack {
-                    Button("Review links") { model.section = .review }.buttonStyle(QuietButton())
-                    Button("Reset feedback…") { confirmResetLearning = true }.buttonStyle(.link)
-                }
             }.padding(20).nestSurface()
             VStack(alignment: .leading, spacing: 12) {
                 fieldLabel("ANONYMOUS USAGE")
@@ -173,9 +167,9 @@ struct SettingsView: View {
             Button("Account & subscription…") { model.showAccount?() }.buttonStyle(QuietButton())
             VStack(alignment: .leading, spacing: 15) {
                 fieldLabel("KEYBOARD SHORTCUTS")
-                Button("Use memorable preset: ⇧⌘K / ⇧⌘N / ⌥⌘T") { model.applyMemorableShortcuts() }
+                Button("Use memorable preset: ⇧⌘K / ⇧⌘N") { model.applyMemorableShortcuts() }
                     .buttonStyle(.link).font(.system(size: 11))
-                Text("Same starting keys: K saves, N adds a note, T adds tags. Replaces these three shortcuts only. Some browsers use these combinations too.").font(.system(size: 11)).foregroundStyle(Color.muted)
+                Text("Same starting keys: K saves and N adds a note with optional tags. Replaces these two shortcuts only. Some browsers use these combinations too.").font(.system(size: 11)).foregroundStyle(Color.muted)
                 Button("Show the quick tour") { model.showOnboarding() }.buttonStyle(.link).font(.system(size: 11))
                 ForEach(CaptureAction.allCases) { action in
                     VStack(alignment: .leading, spacing: 5) {
@@ -202,40 +196,17 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 12) {
                 fieldLabel("AFTER SAVING")
                 Toggle("Close source tab after a successful save", isOn: $model.closeAfterQuickSave)
-                Text("Applies to Save link, Save with a note, and Save with tags. SaveNest verifies that the tab has not changed before closing it. Saving selected tabs or an entire window never closes tabs.")
+                Text("Applies to Save link and Save with a note. SaveNest verifies that the tab has not changed before closing it. Saving selected tabs or an entire window never closes tabs.")
                     .font(.system(size: 11)).foregroundStyle(Color.muted).fixedSize(horizontal: false, vertical: true)
-            }.padding(20).nestSurface()
-            VStack(alignment: .leading, spacing: 13) {
-                fieldLabel("TAB CLEANUP")
-                Toggle("Enable website cleanup", isOn: $model.tabCleanupEnabled)
-                HStack {
-                    Button(model.tabCleanupDomains.isEmpty ? "Choose websites…" : "\(model.tabCleanupEnabled ? "On" : "Off") · \(model.tabCleanupDomains.count) \(model.tabCleanupDomains.count == 1 ? "website" : "websites")…") {
-                        showingCleanupWebsites = true
-                        model.refreshCleanupOpenTabs()
-                    }.buttonStyle(QuietButton())
-                    if model.isCleaningTabs { ProgressView().controlSize(.small) }
-                    Spacer()
-                }
-                Picker("When cleanup runs", selection: $model.tabCleanupApproval) {
-                    ForEach(TabCleanupApproval.allCases) { option in Text(option.title).tag(option) }
-                }.pickerStyle(.segmented).disabled(!model.tabCleanupEnabled)
-                Text("Ask before closing is recommended. Cleanup only considers open tabs from websites you choose; it never acts in the background.")
-                    .font(.system(size: 11)).foregroundStyle(Color.muted).fixedSize(horizontal: false, vertical: true)
-                Button(model.tabCleanupApproval == .ask ? "Review & clean up tabs…" : "Clean up tabs now") { model.runTabCleanup() }
-                    .buttonStyle(SageButton()).disabled(!model.tabCleanupEnabled || model.tabCleanupDomains.isEmpty || model.isCleaningTabs)
             }.padding(20).nestSurface()
             VStack(alignment: .leading, spacing: 10) {
                 fieldLabel("BROWSERS & PRIVACY")
-                Text("Capture directly from Safari and supported Chromium browsers, including Chrome, Arc, Brave, and Edge. macOS asks for Automation permission the first time you capture from each browser.").font(.system(size: 12)).lineSpacing(4)
-                Text("For Firefox or another app, use Save copied link from the menu bar, or enable clipboard offers above. Single-tab saves can close their source tab after success; selected-tab and whole-window saves never do. Search and cleanup only read tabs when you ask.").font(.system(size: 11)).foregroundStyle(Color.muted).lineSpacing(4)
-                Text("Website icons load directly from the site or its icon host and are cached on this Mac. SaveNest doesn’t use a third-party favicon service or send browser cookies.").font(.system(size: 11)).foregroundStyle(Color.muted).lineSpacing(4)
-                Text("Richer social titles use page metadata and post text when available. Your browser may require its ‘Allow JavaScript from Apple Events’ setting for this. Capture still works without it, using the tab title or a description based on the URL.").font(.system(size: 11)).foregroundStyle(Color.muted).lineSpacing(4)
+                Text("SaveNest reads browser tabs only when you use a capture or tab tool. Links, notes, and tags stay on this Mac.")
+                    .font(.system(size: 11)).foregroundStyle(Color.muted).lineSpacing(4)
                 Button("Open Automation Settings ↗") { NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")!) }.buttonStyle(.link).font(.system(size: 11))
             }
             VStack(alignment: .leading, spacing: 13) {
                 fieldLabel("YOUR LIBRARY")
-                Text("Swipe left to reveal Delete and Archive, or right for Email and Copy. A long left swipe archives immediately; Undo appears at the bottom. In Archive, swipe left to restore.").font(.system(size: 11)).foregroundStyle(Color.muted).lineSpacing(4)
-                Text("Archive all links to clear your active library. Notes and tags stay with their links, and you can undo it. Empty archive is inside Archive and asks before deleting permanently.").font(.system(size: 11)).foregroundStyle(Color.muted).lineSpacing(4)
                 Button("Archive all links…") { archiveIDs = model.activeIDs }
                     .buttonStyle(QuietButton()).disabled(model.activeIDs.isEmpty)
                 HStack {
@@ -249,10 +220,6 @@ struct SettingsView: View {
         }.padding(32) }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color.paper).foregroundStyle(Color.ink).nestAppearance()
-        .alert("Reset importance feedback?", isPresented: $confirmResetLearning) {
-            Button("Cancel", role: .cancel) {}
-            Button("Reset feedback", role: .destructive) { model.resetLearning() }
-        } message: { Text("This removes your Important and Not needed labels. Links, favorites, notes, and tags are kept.") }
         .alert(archiveIDs.map { "Archive \($0.count) \($0.count == 1 ? "link" : "links")?" } ?? "", isPresented: Binding(get: { archiveIDs != nil }, set: { if !$0 { archiveIDs = nil } }), presenting: archiveIDs) { ids in
             Button("Cancel", role: .cancel) { archiveIDs = nil }
             Button("Archive all") {
@@ -263,7 +230,6 @@ struct SettingsView: View {
         } message: { _ in
             Text("All saved links will move to Archive, including links hidden by filters. Your notes and tags stay with them. You can undo this.")
         }
-        .sheet(isPresented: $showingCleanupWebsites) { TabCleanupWebsitesView(model: model) }
     }
 
     private var appearancePicker: some View {
