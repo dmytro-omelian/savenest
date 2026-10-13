@@ -93,6 +93,8 @@ Press **⌘⇧O** from any app to open only the compact tab switcher, without ac
 - Add tags with Return or commas, press Tab to accept the first matching suggestion, and click a tag to remove it. Suggestions mirror lowercase or leading-uppercase input; automatic tags follow the casing used by most existing tags. Saving includes any unfinished tag input; **⌘Return** saves the editor.
 - Existing libraries and backups without tags load automatically; notes and saved dates are preserved.
 - A row’s **…** menu has copy, note/tag editing, Delete, and archive.
+- **⌘Z** restores the last library change. Text fields keep standard typing undo.
+- A long swipe grows and highlights its direct action, then labels it before release applies it: Copy to the right, Archive or Restore to the left.
 - Account and Settings are in the right-hand rail. The library header only shows the local status; individual links retain their **…** menus. Archived links can be restored.
 - Duplicates are skipped without overwriting existing notes or dates.
 - Internal browser pages, local files, and URLs with embedded credentials are skipped.

@@ -268,9 +268,18 @@ final class LibraryTests {
         XCTAssertTrue(horizontal.axis == .horizontal)
         XCTAssertEqual(RowSwipe.finish(offset: horizontal.x), .archive)
         XCTAssertEqual(RowSwipe.finish(offset: -70), .archiveButton)
+        XCTAssertEqual(RowSwipe.finish(offset: 180), .copy)
         XCTAssertEqual(RowSwipe.finish(offset: 60), .shareButtons)
         XCTAssertEqual(RowSwipe.finish(offset: 30), .closed)
         XCTAssertEqual(RowSwipe.finish(offset: -200, cancelled: true), .closed)
+        XCTAssertEqual(RowSwipe.archiveIntentProgress(offset: -140), 0)
+        XCTAssertEqual(RowSwipe.archiveIntentProgress(offset: -175), 0.5)
+        XCTAssertEqual(RowSwipe.archiveIntentProgress(offset: -210), 1)
+        XCTAssertEqual(RowSwipe.archiveIntentProgress(offset: -260), 1)
+        XCTAssertEqual(RowSwipe.copyIntentProgress(offset: 140), 0)
+        XCTAssertEqual(RowSwipe.copyIntentProgress(offset: 175), 0.5)
+        XCTAssertEqual(RowSwipe.copyIntentProgress(offset: 210), 1)
+        XCTAssertEqual(RowSwipe.copyIntentProgress(offset: 260), 1)
     }
     func testSiteIconURLsAndHTMLFallback() {
         let base = SiteIcon.origin("https://www.example.com/private/path?secret=token#part")!

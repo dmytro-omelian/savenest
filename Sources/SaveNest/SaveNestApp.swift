@@ -13,7 +13,7 @@ enum SaveNestApp {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuItemValidation {
     private var model: AppModel!
     private var libraryWindow: NSWindow!
     private var captureEditor: NSPanel?
@@ -152,6 +152,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc private func focusSearch() { openLibrary(); NotificationCenter.default.post(name: .focusSearch, object: nil) }
     @objc private func exportLibrary() { model.exportLibrary() }
     @objc private func importLibrary() { model.importLibrary() }
+    @objc private func performUndo(_ sender: Any?) {
+        if let manager = NSApp.keyWindow?.firstResponder?.undoManager, manager.canUndo {
+            manager.undo()
+        } else {
+            model.undoLastAction()
+        }
+    }
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        guard menuItem.action == #selector(performUndo(_:)) else { return true }
+        return NSApp.keyWindow?.firstResponder?.undoManager?.canUndo == true || model.canUndoLastAction
+    }
     private func item(_ title: String, _ action: Selector, key: String = "") -> NSMenuItem {
         let result = NSMenuItem(title: title, action: action, keyEquivalent: key); result.target = self; return result
     }
@@ -193,7 +204,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         file.addItem(.separator()); file.addItem(NSMenuItem(title: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w"))
         let fileRoot = NSMenuItem(title: "File", action: nil, keyEquivalent: ""); fileRoot.submenu = file; main.addItem(fileRoot)
         let edit = NSMenu(title: "Edit")
-        for (title, action, key) in [("Undo", Selector(("undo:")), "z"), ("Cut", #selector(NSText.cut(_:)), "x"), ("Copy", #selector(NSText.copy(_:)), "c"), ("Paste", #selector(NSText.paste(_:)), "v"), ("Select All", #selector(NSText.selectAll(_:)), "a")] { edit.addItem(NSMenuItem(title: title, action: action, keyEquivalent: key)) }
+        edit.addItem(item("Undo", #selector(performUndo(_:)), key: "z"))
+        for (title, action, key) in [("Cut", #selector(NSText.cut(_:)), "x"), ("Copy", #selector(NSText.copy(_:)), "c"), ("Paste", #selector(NSText.paste(_:)), "v"), ("Select All", #selector(NSText.selectAll(_:)), "a")] { edit.addItem(NSMenuItem(title: title, action: action, keyEquivalent: key)) }
         edit.addItem(.separator()); edit.addItem(item("Find…", #selector(focusSearch), key: "f"))
         let editRoot = NSMenuItem(title: "Edit", action: nil, keyEquivalent: ""); editRoot.submenu = edit; main.addItem(editRoot)
         NSApp.mainMenu = main

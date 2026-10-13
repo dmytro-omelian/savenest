@@ -94,6 +94,13 @@ final class AppModel: ObservableObject {
         let archived: Bool
         var message: String { "\(ids.count) " + (ids.count == 1 ? "link " : "links ") + (archived ? "archived" : "restored") }
     }
+    private struct LibraryUndo {
+        let library: Library
+        let title: String
+        let clearsArchiveUndo: Bool
+    }
+    private var lastLibraryUndo: LibraryUndo?
+    var canUndoLastAction: Bool { lastLibraryUndo != nil }
     var activeIDs: Set<UUID> { Set(library.links.filter { !$0.isArchived }.map(\.id)) }
     var archivedIDs: Set<UUID> { Set(library.links.filter(\.isArchived).map(\.id)) }
     @Published var error: String?
@@ -227,7 +234,7 @@ final class AppModel: ObservableObject {
     @discardableResult func renameTag(_ tag: String, to replacement: String) -> Bool {
         var next = library
         let changed = next.renameTag(tag, to: replacement)
-        guard changed > 0, commit(next) else { return false }
+        guard changed > 0, commit(next, undoTitle: "Rename Tag") else { return false }
         if LinkSearch.folded(selectedTag ?? "") == LinkSearch.folded(tag) { selectedTag = SavedLink.normalizedTags([replacement]).first }
         notify(changed == 1 ? "Tag updated on 1 link" : "Tag updated on (changed) links")
         return true
@@ -235,23 +242,40 @@ final class AppModel: ObservableObject {
     @discardableResult func deleteTag(_ tag: String) -> Bool {
         var next = library
         let changed = next.deleteTag(tag)
-        guard changed > 0, commit(next) else { return false }
+        guard changed > 0, commit(next, undoTitle: "Remove Tag") else { return false }
         if LinkSearch.folded(selectedTag ?? "") == LinkSearch.folded(tag) { selectedTag = nil }
         notify(changed == 1 ? "Tag removed from 1 link" : "Tag removed from (changed) links")
         return true
     }
     var selected: SavedLink? { library.links.first { $0.id == selectedID } }
     var activeCount: Int { library.links.filter { !$0.isArchived }.count }
-    @discardableResult private func commit(_ next: Library, captureFeedback: Bool = false) -> Bool {
+    @discardableResult private func commit(_ next: Library, captureFeedback: Bool = false, undoTitle: String? = "Change Library", clearsArchiveUndo: Bool = false) -> Bool {
         func report(_ message: String) {
             if captureFeedback { notify(CaptureNotice(title: "Couldn’t save your tab", message: message, isError: true)) }
             else { error = message }
         }
+        func apply() {
+            guard next != library else { return }
+            if let undoTitle {
+                lastLibraryUndo = LibraryUndo(library: library, title: undoTitle, clearsArchiveUndo: clearsArchiveUndo)
+            } else {
+                lastLibraryUndo = nil
+            }
+            library = next
+        }
         // The preview owns an in-memory fixture and never loads or writes the user's library.
-        if isPreview { library = next; return true }
+        if isPreview { apply(); return true }
         guard !loadFailed else { report("Your library couldn’t be opened. Restore a valid backup and restart SaveNest. Your original file is unchanged."); return false }
-        do { try file.save(next); library = next; return true }
+        do { try file.save(next); apply(); return true }
         catch { report("Couldn’t write to your library. \(error.localizedDescription)"); return false }
+    }
+    func undoLastAction() {
+        guard let undo = lastLibraryUndo else { return }
+        guard commit(undo.library, undoTitle: nil) else { return }
+        lastLibraryUndo = nil
+        if undo.clearsArchiveUndo { archiveUndo = nil }
+        selectedID = nil; swipedLinkID = nil
+        notify(CaptureNotice(title: "Undone", message: "\(undo.title) reverted."))
     }
     func capture(action: CaptureAction = .quick) {
         if action == .search { showTabSearch?(); return }
@@ -324,7 +348,8 @@ final class AppModel: ObservableObject {
                LinkTitle.isGeneric(next.links[index].title), !LinkTitle.isGeneric(link.title) { next.links[index].title = link.title }
         }
         let added = next.insert(prepared)
-        guard commit(next, captureFeedback: true) else { return false }
+        let undoTitle = added == 1 ? "Save Link" : "Save Links"
+        guard commit(next, captureFeedback: true, undoTitle: undoTitle) else { return false }
         analytics.record(.linksSaved, count: added)
         let title = added == 0 ? "Already saved" : (added == 1 ? "Tab saved" : "\(added) tabs saved")
         let message = added == 0 ? "Already in your library. No duplicate added." : "Ready in your library whenever you need it."
@@ -363,11 +388,11 @@ final class AppModel: ObservableObject {
         var link = SavedLink(url: valid.absoluteString, title: title, collection: collection)
         link.note = note; link.tags = SavedLink.normalizedTags(tags)
         if next.links.contains(where: { Library.identity($0.url) == Library.identity(link.url) }) {
-            error = "This link is already saved. Open its note and tags from your library to edit it."
-            return false
+            notify(CaptureNotice(title: "Already saved", message: "This link is already in your library. No duplicate added."))
+            return true
         }
         let added = next.insert([link])
-        guard commit(next) else { return false }
+        guard commit(next, undoTitle: "Save Link") else { return false }
         analytics.record(.linksSaved, count: added)
         if !note.isEmpty { analytics.record(.noteSaved) }
         if !tags.isEmpty { analytics.record(.tagsSaved) }
@@ -384,7 +409,7 @@ final class AppModel: ObservableObject {
         next.links[index].note = link.note
         next.links[index].tags = SavedLink.normalizedTags(link.tags)
         next.links[index].isFavorite = link.isFavorite
-        guard commit(next) else { return false }
+        guard commit(next, undoTitle: "Edit Link") else { return false }
         if previous.note != link.note { analytics.record(.noteSaved) }
         if previous.tags != next.links[index].tags { analytics.record(.tagsSaved) }
         return true
@@ -394,7 +419,8 @@ final class AppModel: ObservableObject {
             guard await authorizeSaving() else { return }
             var next = library
             guard let index = next.links.firstIndex(where: { $0.id == link.id }) else { return }
-            next.links[index].isFavorite.toggle(); _ = commit(next)
+            next.links[index].isFavorite.toggle()
+            _ = commit(next, undoTitle: next.links[index].isFavorite ? "Favorite Link" : "Remove Favorite")
         }
     }
     @discardableResult func archive(_ link: SavedLink) -> Bool {
@@ -403,7 +429,8 @@ final class AppModel: ObservableObject {
     @discardableResult func setArchived(_ archived: Bool, ids: Set<UUID>) -> Bool {
         var next = library
         let changed = next.setArchived(archived, ids: ids)
-        guard !changed.isEmpty, commit(next) else { return false }
+        let noun = changed.count == 1 ? "Link" : "Links"
+        guard !changed.isEmpty, commit(next, undoTitle: archived ? "Archive \(noun)" : "Restore \(noun)", clearsArchiveUndo: true) else { return false }
         selectedID = nil; swipedLinkID = nil
         archiveUndo = ArchiveUndo(ids: changed, archived: archived)
         if archived { analytics.record(.linksArchived, count: changed.count) }
@@ -413,13 +440,13 @@ final class AppModel: ObservableObject {
         guard let undo = archiveUndo else { return }
         var next = library
         next.setArchived(!undo.archived, ids: undo.ids)
-        if commit(next) { archiveUndo = nil }
+        if commit(next, undoTitle: nil) { archiveUndo = nil; lastLibraryUndo = nil }
     }
     func dismissArchiveUndo() { archiveUndo = nil }
     func emptyArchive(ids: Set<UUID>) {
         var next = library
         let removed = next.deleteArchived(ids: ids)
-        guard removed > 0, commit(next) else { return }
+        guard removed > 0, commit(next, undoTitle: nil) else { return }
         archiveUndo = nil; selectedID = nil; swipedLinkID = nil
         notify(CaptureNotice(title: "Archive emptied", message: "\(removed) " + (removed == 1 ? "link permanently deleted." : "links permanently deleted.")))
     }
@@ -453,7 +480,7 @@ final class AppModel: ObservableObject {
 
     func delete(_ link: SavedLink) {
         var next = library; next.links.removeAll { $0.id == link.id }
-        if commit(next) { selectedID = nil; notify("Link deleted") }
+        if commit(next, undoTitle: "Delete Link") { selectedID = nil; notify("Link deleted") }
     }
     func configureShortcut(_ value: CaptureShortcut?, for action: CaptureAction) {
         if isPreview { if let value { shortcuts[action] = value }; return }
@@ -493,7 +520,7 @@ final class AppModel: ObservableObject {
         var next = library
         let isNew = !next.links.contains { Library.identity($0.url) == Library.identity(link.url) }
         guard next.saveAnnotated(link) else { notify(CaptureNotice(title: "Couldn’t save this link", message: "The web address is invalid.", isError: true)); return false }
-        guard commit(next, captureFeedback: true) else { return false }
+        guard commit(next, captureFeedback: true, undoTitle: isNew ? "Save Link" : "Edit Link") else { return false }
         analytics.record(.linksSaved, count: isNew ? 1 : 0)
         if link.browser == "Clipboard" && isNew { analytics.record(.clipboardSaved) }
         if !link.note.isEmpty { analytics.record(.noteSaved) }
@@ -539,7 +566,7 @@ final class AppModel: ObservableObject {
             let links = imported.links.map { link -> SavedLink in var result = link; result.id = UUID(); return result }
             let added = next.insert(links)
             for name in imported.collections where !next.collections.contains(name) && !["All links", "Favorites", "Archive"].contains(name) { next.collections.append(name) }
-            if commit(next) { analytics.record(.linksSaved, count: added); notify("Imported \(added) links") }
+            if commit(next, undoTitle: "Import Links") { analytics.record(.linksSaved, count: added); notify("Imported \(added) links") }
         } catch { self.error = "This backup couldn’t be imported. \(error.localizedDescription)" }
         }
     }
@@ -574,13 +601,13 @@ final class AppModel: ObservableObject {
             var next = library
             guard let index = next.links.firstIndex(where: { $0.id == link.id }) else { return }
             next.links[index].importance = importance
-            if commit(next), importance != nil { analytics.record(.importanceLabeled) }
+            if commit(next, undoTitle: "Change Importance"), importance != nil { analytics.record(.importanceLabeled) }
         }
     }
     func resetLearning() {
         var next = library
         for index in next.links.indices { next.links[index].importance = nil }
-        if commit(next) { notify("Importance feedback reset") }
+        if commit(next, undoTitle: "Reset Importance") { notify("Importance feedback reset") }
     }
     func applyMemorableShortcuts() {
         let previous = shortcuts

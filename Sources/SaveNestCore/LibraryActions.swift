@@ -55,6 +55,8 @@ public enum EmailShare {
 
 /// Direction locks once per gesture; normal vertical scrolling never reveals actions.
 public struct RowSwipe {
+    public static let archiveThreshold = -170.0
+    public static let copyThreshold = 170.0
     public enum Axis { case undecided, horizontal, vertical }
     public private(set) var axis: Axis = .undecided
     public private(set) var x = 0.0
@@ -66,10 +68,17 @@ public struct RowSwipe {
             axis = abs(x) > abs(y) * 1.5 ? .horizontal : .vertical
         }
     }
-    public enum Outcome: Equatable { case closed, archive, archiveButton, shareButtons }
+    public enum Outcome: Equatable { case closed, archive, copy, archiveButton, shareButtons }
+    public static func archiveIntentProgress(offset: Double) -> Double {
+        min(1, max(0, (-offset - 140) / 70))
+    }
+    public static func copyIntentProgress(offset: Double) -> Double {
+        min(1, max(0, (offset - 140) / 70))
+    }
     public static func finish(offset: Double, cancelled: Bool = false) -> Outcome {
         guard !cancelled else { return .closed }
-        if offset <= -170 { return .archive }
+        if offset <= archiveThreshold { return .archive }
+        if offset >= copyThreshold { return .copy }
         if offset <= -40 { return .archiveButton }
         if offset >= 40 { return .shareButtons }
         return .closed

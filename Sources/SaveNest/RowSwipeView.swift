@@ -72,15 +72,27 @@ struct SwipeableLink<Content: View>: View {
         .background {
             HStack(spacing: 6) {
                 if offset > 0 {
+                    action(
+                        "Copy",
+                        icon: "link",
+                        color: .sage,
+                        expansion: RowSwipe.copyIntentProgress(offset: offset),
+                        pending: offset >= RowSwipe.copyThreshold
+                    ) { copy() }
                     action("Email", icon: "envelope", color: .sage) { close(); model.share(link) }
-                    action("Copy", icon: "link", color: .muted) { close(); model.copy(link) }
                 }
                 Spacer(minLength: 0)
                 if offset < 0 {
                     if !link.isArchived {
                         action("Delete", icon: "trash", color: .muted) { delete() }
                     }
-                    action(link.isArchived ? "Restore" : "Archive", icon: link.isArchived ? "arrow.uturn.backward" : "archivebox", color: .sage) { archive() }
+                    action(
+                        link.isArchived ? "Restore" : "Archive",
+                        icon: link.isArchived ? "arrow.uturn.backward" : "archivebox",
+                        color: .sage,
+                        expansion: RowSwipe.archiveIntentProgress(offset: offset),
+                        pending: offset <= RowSwipe.archiveThreshold
+                    ) { archive() }
                 }
             }.padding(.horizontal, 6).padding(.vertical, 5)
                 .background(Color.sidebar.opacity(0.22))
@@ -89,12 +101,16 @@ struct SwipeableLink<Content: View>: View {
         .contentShape(Rectangle())
         .onHover { pointerInside = $0 }
         .background(RowSwipeEvents(pointerInside: pointerInside, changed: { delta in
-            if origin == nil { origin = offset; model.swipedLinkID = link.id }
-            offset = min(156, max(-210, (origin ?? 0) + delta))
+            if origin == nil {
+                origin = offset; model.swipedLinkID = link.id
+                NSApp.keyWindow?.makeFirstResponder(nil)
+            }
+            offset = min(210, max(-210, (origin ?? 0) + delta))
         }, ended: { cancelled in
             origin = nil
             switch RowSwipe.finish(offset: offset, cancelled: cancelled) {
             case .archive: archive()
+            case .copy: copy()
             case .archiveButton: withAnimation(.easeOut(duration: 0.18)) { offset = link.isArchived ? -82 : -156 }
             case .shareButtons: withAnimation(.easeOut(duration: 0.18)) { offset = 156 }
             case .closed: close()
@@ -107,11 +123,12 @@ struct SwipeableLink<Content: View>: View {
         .accessibilityAction(named: Text(link.isArchived ? "Restore" : "Archive")) { archive() }
         .accessibilityAction(named: Text("Share by email")) { model.share(link) }
     }
-    private func action(_ title: String, icon: String, color: Color, run: @escaping () -> Void) -> some View {
-        SwipeActionButton(title: title, icon: icon, color: color, run: run)
+    private func action(_ title: String, icon: String, color: Color, expansion: Double = 0, pending: Bool = false, run: @escaping () -> Void) -> some View {
+        SwipeActionButton(title: title, icon: icon, color: color, expansion: expansion, pending: pending, run: run)
     }
     private func close() { origin = nil; withAnimation(.easeOut(duration: 0.18)) { offset = 0 } }
     private func archive() { close(); withAnimation(.easeOut(duration: 0.18)) { _ = model.archive(link) } }
+    private func copy() { close(); model.copy(link) }
     private func delete() { close(); withAnimation(.easeOut(duration: 0.18)) { model.delete(link) } }
 }
 
@@ -119,6 +136,8 @@ private struct SwipeActionButton: View {
     let title: String
     let icon: String
     let color: Color
+    let expansion: Double
+    let pending: Bool
     let run: () -> Void
     @State private var hovered = false
 
@@ -127,19 +146,26 @@ private struct SwipeActionButton: View {
             VStack(spacing: 5) {
                 Image(systemName: icon)
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(color)
+                    .foregroundStyle(pending ? Color.onAccent : color)
                     .frame(width: hovered ? 34 : 26, height: 26)
-                    .background(color.opacity(hovered ? 0.17 : 0.11), in: Capsule())
-                Text(title).font(.system(size: 9, weight: .semibold)).foregroundStyle(Color.ink.opacity(0.82))
+                    .background(pending ? Color.onAccent.opacity(0.16) : color.opacity(hovered ? 0.17 : 0.11), in: Capsule())
+                    .scaleEffect(pending ? 1.08 : 1)
+                Text(pending ? "Release to \(title.lowercased())" : title)
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(pending ? Color.onAccent : Color.ink.opacity(0.82))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
-            .frame(width: hovered ? 70 : 58).frame(maxHeight: .infinity)
-            .background(hovered ? Color.raised : Color.raised.opacity(0.96), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(hovered ? color.opacity(0.24) : Color.line.opacity(0.65)))
-            .shadow(color: .black.opacity(hovered ? 0.08 : 0.045), radius: hovered ? 5 : 3, y: hovered ? 2 : 1)
+            .frame(width: max(hovered ? 70 : 58, 58 + CGFloat(expansion) * 70)).frame(maxHeight: .infinity)
+            .background(pending ? color.opacity(0.9) : (hovered ? Color.raised : Color.raised.opacity(0.96)), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(pending ? color : (hovered ? color.opacity(0.24) : Color.line.opacity(0.65))))
+            .shadow(color: pending ? color.opacity(0.24) : .black.opacity(hovered ? 0.08 : 0.045), radius: pending ? 8 : (hovered ? 5 : 3), y: pending ? 3 : (hovered ? 2 : 1))
             .contentShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(title)
+        .accessibilityValue(pending ? "Release to apply" : "")
+        .animation(.easeOut(duration: 0.14), value: pending)
         .onHover { inside in
             withAnimation(.easeOut(duration: 0.16)) { hovered = inside }
         }
