@@ -42,7 +42,7 @@ public enum AccountAccess {
               now.timeIntervalSince(verifiedAt) < maximumAge,
               account.subscription.active, ["active", "trialing"].contains(account.subscription.status),
               ["sandbox", "live"].contains(account.subscription.mode),
-              account.subscription.plan == "monthly",
+              ["monthly", "yearly"].contains(account.subscription.plan ?? ""),
               let periodEnd = account.subscription.renewsAt, periodEnd > now.timeIntervalSince1970 else { return false }
         return true
     }

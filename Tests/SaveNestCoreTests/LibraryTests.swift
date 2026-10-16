@@ -462,8 +462,9 @@ final class LibraryTests {
         }
         XCTAssertTrue(AccountAccess.allowsSaving(account(), verifiedAt: now, now: now))
         XCTAssertTrue(AccountAccess.allowsSaving(account(status: "trialing"), verifiedAt: now, now: now))
+        XCTAssertTrue(AccountAccess.allowsSaving(account(mode: "live", plan: "yearly"), verifiedAt: now.addingTimeInterval(-119), now: now))
         XCTAssertFalse(AccountAccess.allowsSaving(account(active: false, status: "trialing"), verifiedAt: now, now: now))
-        XCTAssertFalse(AccountAccess.allowsSaving(account(mode: "live", plan: "annual"), verifiedAt: now.addingTimeInterval(-119), now: now))
+        XCTAssertFalse(AccountAccess.allowsSaving(account(mode: "live", plan: "weekly"), verifiedAt: now.addingTimeInterval(-119), now: now))
         XCTAssertFalse(AccountAccess.allowsSaving(account(), verifiedAt: nil, now: now))
         XCTAssertFalse(AccountAccess.allowsSaving(account(), verifiedAt: now.addingTimeInterval(-120), now: now))
         XCTAssertFalse(AccountAccess.allowsSaving(account(), verifiedAt: now.addingTimeInterval(1), now: now))

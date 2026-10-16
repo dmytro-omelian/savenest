@@ -21,7 +21,7 @@ Choose **SaveNest → Account**, enter your email in the app, and choose **Email
 
 Saving requires an active subscription:
 
-- **SaveNest:** $4.99/month for new live subscriptions. One plan includes every feature; cancel anytime. Existing $1.99 and $5 subscribers keep their price. The owner-only sandbox keeps its $1.99 test price.
+- **SaveNest:** $1.99/month or $19.99/year for new live subscriptions. One plan includes every feature; cancel anytime. Existing $4.99 and $5 monthly subscribers keep their price. The owner-only sandbox keeps its $1.99 monthly test price.
 
 Enter active promotion codes on the hosted Stripe Checkout page. Stripe shows the discount and its terms before payment. SaveNest does not accept or pre-apply codes. Existing server-confirmed BETA trials keep their recorded access, while new redemptions use the promotion terms configured in Stripe. Cancel from Account → Manage billing.
 

@@ -3,14 +3,14 @@ import SwiftUI
 struct AccountView: View {
     @ObservedObject var account: AccountController
     var onBack: () -> Void = {}
-    private var monthlyAmount: String { account.isSandbox ? "$1.99" : "$4.99" }
+    private let monthlyAmount = "$1.99"
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 Button { onBack() } label: { Label("Library", systemImage: "chevron.left") }
                     .buttonStyle(.plain).font(.system(size: 12, weight: .medium)).foregroundStyle(Color.muted)
                 HStack(spacing: 10) { NestMark().frame(width: 30, height: 30); Text("savenest").font(.system(size: 23, weight: .semibold)).tracking(-0.8) }
-                sheetHeading(account.hasLogin ? "Your little corner." : "A home for your good finds.", subtitle: account.hasLogin ? "Your account and subscription." : "Sign in, subscribe for $4.99/month, and start saving.")
+                sheetHeading(account.hasLogin ? "Your little corner." : "A home for your good finds.", subtitle: account.hasLogin ? "Your account and subscription." : "Sign in, choose monthly or yearly, and start saving.")
                 if let details = account.account {
                     VStack(alignment: .leading, spacing: 7) {
                         Text(details.user.name.isEmpty ? "Your account" : details.user.name).font(.system(size: 16, weight: .medium))
@@ -60,7 +60,10 @@ struct AccountView: View {
                     }
                 } else if account.canChoosePlan {
                     VStack(spacing: 12) {
-                        plan("Monthly", amount: "\(monthlyAmount) / month", offer: "Everything in SaveNest", renewal: "One simple plan. Cancel anytime.", value: "monthly")
+                        plan("Monthly", amount: "\(monthlyAmount) / month", offer: "Everything in SaveNest", renewal: "One simple plan. Cancel anytime.", value: "monthly", buttonTitle: "Subscribe for \(monthlyAmount) ↗")
+                        if !account.isSandbox {
+                            plan("Yearly", amount: "$19.99 / year", offer: "Save $3.89 each year", renewal: "Same complete plan. Cancel anytime.", value: "yearly", buttonTitle: "Subscribe for $19.99 ↗")
+                        }
                     }
                 }
                 if account.referral?.eligible == true, let referral = account.referral {
@@ -111,19 +114,19 @@ struct AccountView: View {
         .background(Color.paper).foregroundStyle(Color.ink).nestAppearance()
         .task(id: account.account?.user.id) { await account.loadReferrals() }
     }
-    private func plan(_ title: String, amount: String, offer: String, renewal: String, value: String) -> some View {
+    private func plan(_ title: String, amount: String, offer: String, renewal: String, value: String, buttonTitle: String) -> some View {
         VStack(alignment: .leading, spacing: 9) {
             HStack { Text(title).font(.system(size: 15, weight: .medium)); Spacer(); Text(amount).font(.system(size: 13)) }
             Text(offer).font(.system(size: 13, weight: .medium)).foregroundStyle(Color.sage)
             Text(renewal).font(.system(size: 11)).foregroundStyle(Color.muted)
-            if account.pendingReferralCode != nil {
+            if value == "monthly", account.pendingReferralCode != nil {
                 Text("Friend invite applied · first month $1").font(.system(size: 11, weight: .medium)).foregroundStyle(Color.sage)
                 HStack(spacing: 12) {
                     Button("Subscribe for $1 first month ↗") { Task { await account.checkout(plan: value) } }.buttonStyle(QuietButton()).disabled(account.isBusy)
                     Button("Remove invite") { account.clearReferralCode() }.buttonStyle(.link)
                 }
             } else {
-                Button("Subscribe for \(monthlyAmount) ↗") { Task { await account.checkout(plan: value) } }.buttonStyle(QuietButton()).disabled(account.isBusy)
+                Button(buttonTitle) { Task { await account.checkout(plan: value) } }.buttonStyle(QuietButton()).disabled(account.isBusy)
             }
             Text("Have a promotion code? Enter it in Stripe Checkout.")
                 .font(.system(size: 11)).foregroundStyle(Color.muted)

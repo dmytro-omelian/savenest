@@ -334,7 +334,7 @@ final class AccountController: NSObject, ObservableObject {
         } catch { if sessionGeneration == generation { message = friendly(error) } }
     }
     func checkout(plan: String) async {
-        guard plan == "monthly" else { return }
+        guard ["monthly", "yearly"].contains(plan) else { return }
         await startBilling(flow: .checkout, plan: plan)
     }
     func openBilling() async { await startBilling(flow: .billing, plan: nil) }
@@ -348,7 +348,7 @@ final class AccountController: NSObject, ObservableObject {
             try AccountKeychain.saveBilling(attempt); pendingBilling = attempt; created = attempt
             var body = ["client": "mac", "state": attempt.state]
             if let plan { body["plan"] = plan }
-            if flow == .checkout, let pendingReferralCode { body["referralCode"] = pendingReferralCode }
+            if flow == .checkout, plan == "monthly", let pendingReferralCode { body["referralCode"] = pendingReferralCode }
             let result: URLResponse = try await request(flow == .checkout ? "api/billing/checkout" : "api/billing/portal", method: "POST", body: body, token: token)
             guard sessionGeneration == generation, accessToken == token, pendingBilling?.id == attempt.id else { return }
             guard try AccountKeychain.billing()?.id == attempt.id else { pendingBilling = nil; billingStage = .idle; message = "This billing request was cancelled in another copy of SaveNest."; return }
