@@ -4,7 +4,7 @@ Save links. Keep the context. Find them again with **⌘O**.
 
 SaveNest is a free, open-source macOS launcher for saved links, notes, open browser tabs, and recent history. Your library stays on your Mac. Local features work without an account or subscription.
 
-[Download preview](https://github.com/dmytro-omelian/savenest/releases/tag/v0.11.1) · [Website](https://savenest.app) · [Contribute](CONTRIBUTING.md) · [Report a bug](https://github.com/dmytro-omelian/savenest/issues/new?template=bug.yml)
+[Download preview](https://github.com/dmytro-omelian/savenest/releases/tag/v0.12.0) · [Website](https://savenest.app) · [Contribute](CONTRIBUTING.md) · [Report a bug](https://github.com/dmytro-omelian/savenest/issues/new?template=bug.yml)
 
 [![Checks](https://github.com/dmytro-omelian/savenest/actions/workflows/checks.yml/badge.svg)](https://github.com/dmytro-omelian/savenest/actions/workflows/checks.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -16,13 +16,14 @@ SaveNest is a free, open-source macOS launcher for saved links, notes, open brow
 - Search saved links, notes, tags, open tabs, and recent browser history in one place.
 - Save the current page, selected tabs, or a whole window with keyboard shortcuts.
 - Add notes and tags while saving; reopen a page or switch to its existing tab.
+- Read a page beside its Obsidian Markdown note, with Original view by default and optional Reader.
 - Organize links with favorites and an archive, and import or export JSON backups.
 
 Press **⌘O** to open the launcher, **Enter** to open a result, and **⌘K** for actions. See the [user guide](docs/user-guide.md) for shortcuts and browser support.
 
 ## Try the app
 
-Download the [signed 0.11.1 preview](https://github.com/dmytro-omelian/savenest/releases/tag/v0.11.1) for **macOS 14+**, on Apple Silicon or Intel.
+Download the [signed 0.12.0 preview](https://github.com/dmytro-omelian/savenest/releases/tag/v0.12.0) for **macOS 14+**, on Apple Silicon or Intel.
 
 This is still a preview. Installed-app migration, offline import/export, live browser permissions, Intel runtime, and real update checks remain open. See the [acceptance checklist](docs/preview-acceptance.md). Before upgrading, export a backup. Native 0.10.0 can install this preview through **SaveNest → Check for Updates…**. Quit the old app first only when installing manually.
 
