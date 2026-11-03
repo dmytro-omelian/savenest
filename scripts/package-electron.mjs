@@ -15,12 +15,22 @@ const identity = process.env.SIGNING_IDENTITY;
 const profile = process.env.NOTARY_PROFILE;
 if (distribution && (!identity || identity === '-' || !profile)) throw new Error('Distribution requires SIGNING_IDENTITY and NOTARY_PROFILE.');
 const manifest = JSON.parse(await readFile('package.json', 'utf8'));
-const nativeVersion = execFileSync('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleShortVersionString', 'Resources/Info.plist'], { encoding: 'utf8' }).trim();
+const plistValue = (plist, key) => execFileSync('/usr/libexec/PlistBuddy', ['-c', `Print :${key}`, plist], { encoding: 'utf8' }).trim();
+const nativeValue = key => plistValue('Resources/Info.plist', key);
+const nativeVersion = nativeValue('CFBundleShortVersionString');
+const nativeBuild = nativeValue('CFBundleVersion');
+const nativePublicKey = nativeValue('SUPublicEDKey');
 if (manifest.version !== nativeVersion) throw new Error('Electron and native helper versions must match.');
+if (!/^[1-9]\d*$/.test(nativeBuild)) throw new Error('The native build number must be a positive integer for Sparkle version ordering.');
+if (Buffer.from(nativePublicKey, 'base64').length !== 32 || Buffer.from(nativePublicKey, 'base64').toString('base64') !== nativePublicKey) {
+  throw new Error('The existing Sparkle Ed25519 public key must be valid.');
+}
 const helper = path.resolve(process.env.HELPER_APP_PATH || 'build/electron-native/SaveNest.app');
 const helperPlist = path.join(helper, 'Contents/Info.plist');
-const helperValue = key => execFileSync('/usr/libexec/PlistBuddy', ['-c', `Print :${key}`, helperPlist], { encoding: 'utf8' }).trim();
+const helperValue = key => plistValue(helperPlist, key);
 if (helperValue('CFBundleShortVersionString') !== manifest.version) throw new Error('The built helper is stale. Rebuild it for this release version.');
+if (helperValue('CFBundleVersion') !== nativeBuild) throw new Error('The built helper is stale. Rebuild it for this native build number.');
+if (helperValue('SUPublicEDKey') !== nativePublicKey) throw new Error('The built helper must preserve the existing Sparkle public key.');
 if (helperValue('SaveNestUpdatesEnabled') !== 'false') throw new Error('The embedded helper must have its Sparkle updater disabled.');
 if (helperValue('CFBundleIdentifier') !== 'app.savenest.mac') throw new Error('The helper must preserve the existing library and account identity.');
 execFileSync('lipo', [path.join(helper, 'Contents/MacOS/SaveNest'), '-verify_arch', architecture === 'x64' ? 'x86_64' : 'arm64']);
@@ -40,9 +50,12 @@ await writeFile(path.join(stage, 'package.json'), JSON.stringify({
 const apps = await packager({
   dir: stage, out: process.env.PACKAGE_WORK_DIR ? path.join(workspace, 'packages') : 'dist', name: 'SaveNest', platform: 'darwin', arch: architecture,
   electronVersion: manifest.devDependencies.electron, overwrite: true, asar: true,
-  appBundleId: 'app.savenest.electron', appVersion: manifest.version, buildVersion: manifest.version,
+  appBundleId: 'app.savenest.electron', appVersion: manifest.version, buildVersion: nativeBuild,
   icon: 'build/AppIcon.icns',
+  // Preserve Sparkle's build ordering and EdDSA identity for migration from the native app.
+  // Electron still uses Squirrel; neither the outer app nor its helper starts Sparkle.
   extendInfo: { LSMinimumSystemVersion: '14.0', NSAppleEventsUsageDescription: 'SaveNest reads browser tabs when you save or search them.',
+    SUPublicEDKey: nativePublicKey, SaveNestUpdatesEnabled: false,
     CFBundleURLTypes: [{ CFBundleURLName: 'app.savenest.electron.auth', CFBundleURLSchemes: ['savenest'] }] }
 });
 for (const directory of apps) {
