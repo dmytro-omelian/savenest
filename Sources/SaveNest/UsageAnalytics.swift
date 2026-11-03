@@ -27,7 +27,7 @@ final class UsageAnalytics {
             session = URLSession(configuration: config, delegate: AnalyticsRedirectBlocker(), delegateQueue: nil)
         }
         timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.flush() }
+            Task { @MainActor [weak self] in self?.flush() }
         }
     }
     func record(_ event: UsageEvent, count: Int = 1) {
