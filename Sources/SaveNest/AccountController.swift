@@ -8,8 +8,8 @@ enum AccountFailure: LocalizedError {
     case signIn, subscription, invalidResponse, callback, keychain, accountBusy, service(String)
     var errorDescription: String? {
         switch self {
-        case .signIn: return "Sign in to SaveNest to start saving. Your existing library is still available."
-        case .subscription: return "Choose a subscription in Account to save links. You can still open and export your library."
+        case .signIn: return "Sign in to manage this account. All local features work without signing in."
+        case .subscription: return "SaveNest is free on your Mac. Cloud subscriptions are not available yet."
         case .invalidResponse: return "SaveNest couldn’t verify your account. Please try again in a moment."
         case .callback: return "This sign-in link doesn’t match your request. Start sign-in again in SaveNest."
         case .keychain: return "SaveNest couldn’t access your login in macOS Keychain. Unlock your keychain and try again."
@@ -78,10 +78,9 @@ final class AccountController: NSObject, ObservableObject {
     private let baseURL = URL(string: "https://savenest.app")!
     var isBusy: Bool { isRefreshing || billingStage == .preparing || billingStage == .checking }
     var isSigningIn: Bool { signInStage != .idle }
-    var canSave: Bool { AccountAccess.allowsSaving(account, verifiedAt: verifiedAt) }
+    var hasVerifiedSubscription: Bool { AccountAccess.hasVerifiedSubscription(account, verifiedAt: verifiedAt) }
     var isSandbox: Bool { account?.subscription.mode == "sandbox" }
     var hasExistingSubscription: Bool { AccountAccess.blocksNewCheckout(account) }
-    var canChoosePlan: Bool { hasLogin && account != nil && !subscriptionUnavailable && !hasExistingSubscription && billingStage == .idle }
     var canManageBilling: Bool { account?.subscription.plan != nil || account?.subscription.status == "unavailable" }
     override init() {
         super.init()
@@ -142,8 +141,8 @@ final class AccountController: NSObject, ObservableObject {
         do {
             let value = try await flight.task.value
             guard accessToken == token, sessionGeneration == generation else { return false }
-            guard refreshFlight?.id == flight.id else { return canSave }
-            applyAccount(value); return canSave
+            guard refreshFlight?.id == flight.id else { return hasVerifiedSubscription }
+            applyAccount(value); return hasVerifiedSubscription
         } catch {
             guard accessToken == token, sessionGeneration == generation, refreshFlight?.id == flight.id else { return false }
             verifiedAt = nil
@@ -159,7 +158,7 @@ final class AccountController: NSObject, ObservableObject {
             let previous = account?.user.id == value.user.id ? account?.subscription : nil
             account = SaveNestAccount(user: value.user, subscription: previous ?? value.subscription)
             verifiedAt = nil; subscriptionUnavailable = true
-            message = "We couldn’t check your subscription right now. Try Check access again. Your saved library is still available."
+            message = "We couldn’t check your subscription right now. Try Refresh account again. All local features remain available."
         } else {
             account = value; verifiedAt = Date(); subscriptionUnavailable = false; message = nil
             if value.subscription.active, pendingReferralCode != nil { clearReferralCode() }
@@ -180,31 +179,14 @@ final class AccountController: NSObject, ObservableObject {
     }
 
     func sendReferralInvite() async {
-        guard !isSendingInvite, let token = accessToken,
-              let email = NativeCallback.normalizedEmail(inviteEmail) else {
-            referralMessage = "Enter your friend’s email address."
-            return
-        }
-        isSendingInvite = true; referralMessage = nil
-        defer { isSendingInvite = false }
-        do {
-            let result: ReferralResponse = try await request("api/referrals", method: "POST", body: ["email": email], token: token)
-            guard accessToken == token else { return }
-            referral = result.referral; inviteEmail = ""
-            referralMessage = "Invitation sent to \(result.email). Your $1 renewal unlocks after they complete their $1 payment."
-        } catch { if accessToken == token { referralMessage = friendly(error) } }
+        referralMessage = "Paid referral offers are paused. SaveNest is free on your Mac."
     }
 
     func clearReferralCode() {
         pendingReferralCode = nil
         UserDefaults.standard.removeObject(forKey: "savenest.pending-referral-code")
     }
-    func authorize() async -> Bool {
-        if canSave { return true }
-        if await refresh() { return true }
-        if message == nil { message = (hasLogin ? AccountFailure.subscription : AccountFailure.signIn).localizedDescription }
-        return false
-    }
+
     private func restorePendingSignIn(_ value: PendingEmailSignIn?) {
         guard let value else { return }
         pendingSignIn = value; authAttempt = value.id
@@ -251,14 +233,9 @@ final class AccountController: NSObject, ObservableObject {
         do { try AccountKeychain.cancelSignIn(id: id) } catch { message = friendly(error) }
     }
     func handleIncomingURL(_ url: URL) {
-        if let code = AccountAccess.referralCode(url) {
-            if hasExistingSubscription {
-                message = "Invite pricing is for a new subscription. You can still invite friends from your Account."
-            } else {
-                pendingReferralCode = code
-                UserDefaults.standard.set(code, forKey: "savenest.pending-referral-code")
-                message = "Friend invite ready. Sign in with the invited email, then subscribe for $1 for your first month."
-            }
+        if AccountAccess.referralCode(url) != nil {
+            clearReferralCode()
+            message = "SaveNest is now free on your Mac. Paid referral offers are paused while Cloud is being developed."
             showAccount(); return
         }
         guard url.scheme == "savenest", ["auth", "billing"].contains(url.host ?? "") else { return }
@@ -334,8 +311,7 @@ final class AccountController: NSObject, ObservableObject {
         } catch { if sessionGeneration == generation { message = friendly(error) } }
     }
     func checkout(plan: String) async {
-        guard ["monthly", "yearly"].contains(plan) else { return }
-        await startBilling(flow: .checkout, plan: plan)
+        message = "SaveNest is free on your Mac. Cloud is coming soon; new subscriptions are not available."
     }
     func openBilling() async { await startBilling(flow: .billing, plan: nil) }
     private func startBilling(flow: NativeBillingFlow, plan: String?) async {
@@ -367,10 +343,10 @@ final class AccountController: NSObject, ObservableObject {
     }
     private func finishBilling(_ url: URL) async {
         if account == nil && hasLogin { _ = await refresh(force: true) }
-        guard let userID = account?.user.id, let token = accessToken else { message = "Sign in to the account you used for payment, then check access here."; showAccount(); return }
+        guard let userID = account?.user.id, let token = accessToken else { message = "Sign in to the account you used for payment, then refresh your account here."; showAccount(); return }
         do {
             guard let result = try AccountKeychain.claimBilling(url, userID: userID) else {
-                message = canSave ? "You’re ready to save links." : "This billing return has expired, was already used, or belongs to another account. You can check access here safely."
+                message = hasVerifiedSubscription ? "Your account is up to date. All local features are free." : "This billing return has expired, was already used, or belongs to another account. You can refresh your account here safely."
                 showAccount(); return
             }
             pendingBilling = nil; startAccessCheck(result, token: token); showAccount()
@@ -392,7 +368,7 @@ final class AccountController: NSObject, ObservableObject {
                 if active && !waitingForPortal {
                     if let pendingID { try? AccountKeychain.cancelBilling(id: pendingID) }
                     self.pendingBilling = nil
-                    self.message = "You’re ready to save links."
+                    self.message = "Your account is up to date. All local features are free."
                     return true
                 }
                 if returned?.status == .cancelled {
@@ -415,7 +391,7 @@ final class AccountController: NSObject, ObservableObject {
     func cancelBilling() {
         billingPollID = UUID(); billingPoll?.cancel(); billingPoll = nil
         let id = pendingBilling?.id; pendingBilling = nil; billingStage = .idle
-        do { try AccountKeychain.cancelBilling(id: id); message = "Stopped waiting. Any payment already completed in Stripe is unchanged. You can check access here anytime." }
+        do { try AccountKeychain.cancelBilling(id: id); message = "Stopped waiting. Any payment already completed in Stripe is unchanged. You can refresh your account here anytime." }
         catch { message = friendly(error) }
     }
     func signOut() {

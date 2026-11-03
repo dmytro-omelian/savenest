@@ -6,10 +6,10 @@ enum CaptureAction: String, CaseIterable, Identifiable {
     case quick, note, selected, window, search, duplicates
     var id: String { rawValue }
     var title: String {
-        switch self { case .quick: return "Save link"; case .note: return "Save with a note"; case .selected: return "Save selected tabs"; case .window: return "Save all tabs in window"; case .search: return "Search open tabs"; case .duplicates: return "Close duplicate tabs" }
+        switch self { case .quick: return "Save link"; case .note: return "Save with a note"; case .selected: return "Save selected tabs"; case .window: return "Save all tabs in window"; case .search: return "Open SaveNest"; case .duplicates: return "Close duplicate tabs" }
     }
     var defaultShortcut: CaptureShortcut {
-        if self == .search { return CaptureShortcut(keyCode: 31, modifiers: UInt32(cmdKey | shiftKey), character: "O") }
+        if self == .search { return CaptureShortcut(keyCode: 31, modifiers: UInt32(cmdKey), character: "O") }
         if self == .duplicates { return CaptureShortcut(keyCode: 2, modifiers: UInt32(cmdKey | shiftKey), character: "D") }
         let modifiers: Int
         switch self {
@@ -35,6 +35,7 @@ struct CaptureShortcut: Codable, Equatable {
     var modifiers: UInt32
     var character: String
     static let standard = CaptureShortcut(keyCode: 40, modifiers: UInt32(cmdKey | shiftKey), character: "K")
+    static let legacySearch = CaptureShortcut(keyCode: 31, modifiers: UInt32(cmdKey | shiftKey), character: "O")
     var label: String {
         (modifiers & UInt32(controlKey) != 0 ? "⌃" : "") +
         (modifiers & UInt32(optionKey) != 0 ? "⌥" : "") +

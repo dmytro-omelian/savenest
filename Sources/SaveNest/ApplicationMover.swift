@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 
 @MainActor
 enum ApplicationMover {
@@ -30,8 +31,8 @@ enum ApplicationMover {
         do {
             let source = Bundle.main.bundleURL.resolvingSymlinksInPath()
             let destination = try install(source)
+            try clearQuarantine(at: destination)
             try relaunch(destination)
-            try? FileManager.default.trashItem(at: source, resultingItemURL: nil)
             NSApp.terminate(nil)
             return true
         } catch {
@@ -81,6 +82,24 @@ enum ApplicationMover {
             }
         }
         return destination
+    }
+
+    /// A programmatic copy keeps Gatekeeper's quarantine attribute. Clear it from
+    /// the installed bundle so macOS launches that path instead of translocating it
+    /// and offering to move it again.
+    private static func clearQuarantine(at application: URL) throws {
+        let errorCode = application.withUnsafeFileSystemRepresentation { path -> Int32 in
+            guard let path else { return EINVAL }
+            guard removexattr(path, "com.apple.quarantine", XATTR_NOFOLLOW) != 0 else { return 0 }
+            return errno
+        }
+        guard errorCode == 0 || errorCode == ENOATTR else {
+            throw NSError(
+                domain: NSPOSIXErrorDomain,
+                code: Int(errorCode),
+                userInfo: [NSFilePathErrorKey: application.path]
+            )
+        }
     }
 
     private static func relaunch(_ application: URL) throws {

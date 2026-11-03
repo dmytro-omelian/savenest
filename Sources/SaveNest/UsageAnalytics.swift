@@ -10,7 +10,8 @@ final class UsageAnalytics {
     private var uploadID: UUID?
     private var session: URLSession?
     private var enabled = false
-    func configure(enabled: Bool) {
+    func configure(enabled requested: Bool) {
+        let enabled = requested && !AppLaunch.isPreview
         self.enabled = enabled
         accumulator.configure(enabled: enabled)
         timer?.invalidate(); timer = nil
@@ -26,7 +27,7 @@ final class UsageAnalytics {
             session = URLSession(configuration: config, delegate: AnalyticsRedirectBlocker(), delegateQueue: nil)
         }
         timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.flush() }
+            Task { @MainActor [weak self] in self?.flush() }
         }
     }
     func record(_ event: UsageEvent, count: Int = 1) {

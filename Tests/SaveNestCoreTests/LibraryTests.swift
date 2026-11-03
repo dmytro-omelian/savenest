@@ -454,28 +454,33 @@ final class LibraryTests {
         XCTAssertEqual(LinkTitle.best(url: "https://linkedin.com/in/anna", browserTitle: "LinkedIn", metadata: ["ogTitle": "LinkedIn: Log In or Sign Up"]), "LinkedIn · anna")
         XCTAssertEqual(LinkTitle.clean(String(repeating: "a", count: 300)).count, 180)
     }
-    func testSubscriptionRequiresFreshVerifiedPaidAccess() throws {
+    func testSubscriptionStatusRequiresFreshServerVerification() throws {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let user = SaveNestAccount.User(id: "user", name: "Dima", email: "dima@example.com")
         func account(active: Bool = true, status: String = "active", mode: String = "sandbox", plan: String? = "monthly", end: Double? = 1_800_010_000) -> SaveNestAccount {
             SaveNestAccount(user: user, subscription: .init(active: active, plan: plan, status: status, mode: mode, renewsAt: end))
         }
-        XCTAssertTrue(AccountAccess.allowsSaving(account(), verifiedAt: now, now: now))
-        XCTAssertTrue(AccountAccess.allowsSaving(account(status: "trialing"), verifiedAt: now, now: now))
-        XCTAssertTrue(AccountAccess.allowsSaving(account(mode: "live", plan: "yearly"), verifiedAt: now.addingTimeInterval(-119), now: now))
-        XCTAssertFalse(AccountAccess.allowsSaving(account(active: false, status: "trialing"), verifiedAt: now, now: now))
-        XCTAssertFalse(AccountAccess.allowsSaving(account(mode: "live", plan: "weekly"), verifiedAt: now.addingTimeInterval(-119), now: now))
-        XCTAssertFalse(AccountAccess.allowsSaving(account(), verifiedAt: nil, now: now))
-        XCTAssertFalse(AccountAccess.allowsSaving(account(), verifiedAt: now.addingTimeInterval(-120), now: now))
-        XCTAssertFalse(AccountAccess.allowsSaving(account(), verifiedAt: now.addingTimeInterval(1), now: now))
-        XCTAssertFalse(AccountAccess.allowsSaving(account(active: false), verifiedAt: now, now: now))
+        XCTAssertTrue(AccountAccess.hasVerifiedSubscription(account(), verifiedAt: now, now: now))
+        XCTAssertTrue(AccountAccess.hasVerifiedSubscription(account(status: "trialing"), verifiedAt: now, now: now))
+        XCTAssertTrue(AccountAccess.hasVerifiedSubscription(account(mode: "live", plan: "yearly"), verifiedAt: now.addingTimeInterval(-119), now: now))
+        XCTAssertTrue(AccountAccess.hasCurrentSubscription(account(), now: now))
+        XCTAssertTrue(AccountAccess.hasCurrentSubscription(account(status: "trialing"), now: now))
+        XCTAssertFalse(AccountAccess.hasVerifiedSubscription(account(active: false, status: "trialing"), verifiedAt: now, now: now))
+        XCTAssertFalse(AccountAccess.hasVerifiedSubscription(account(mode: "live", plan: "weekly"), verifiedAt: now.addingTimeInterval(-119), now: now))
+        XCTAssertFalse(AccountAccess.hasVerifiedSubscription(account(), verifiedAt: nil, now: now))
+        XCTAssertFalse(AccountAccess.hasVerifiedSubscription(account(), verifiedAt: now.addingTimeInterval(-120), now: now))
+        XCTAssertFalse(AccountAccess.hasVerifiedSubscription(account(), verifiedAt: now.addingTimeInterval(1), now: now))
+        XCTAssertFalse(AccountAccess.hasVerifiedSubscription(account(active: false), verifiedAt: now, now: now))
         for status in ["canceled", "past_due", "unpaid", "incomplete"] {
-            XCTAssertFalse(AccountAccess.allowsSaving(account(status: status), verifiedAt: now, now: now))
+            XCTAssertFalse(AccountAccess.hasVerifiedSubscription(account(status: status), verifiedAt: now, now: now))
         }
-        XCTAssertFalse(AccountAccess.allowsSaving(account(mode: "preview"), verifiedAt: now, now: now))
-        XCTAssertFalse(AccountAccess.allowsSaving(account(plan: nil), verifiedAt: now, now: now))
-        XCTAssertFalse(AccountAccess.allowsSaving(account(end: nil), verifiedAt: now, now: now))
-        XCTAssertFalse(AccountAccess.allowsSaving(account(end: now.timeIntervalSince1970), verifiedAt: now, now: now))
+        XCTAssertFalse(AccountAccess.hasVerifiedSubscription(account(mode: "preview"), verifiedAt: now, now: now))
+        XCTAssertFalse(AccountAccess.hasVerifiedSubscription(account(plan: nil), verifiedAt: now, now: now))
+        XCTAssertFalse(AccountAccess.hasVerifiedSubscription(account(end: nil), verifiedAt: now, now: now))
+        XCTAssertFalse(AccountAccess.hasVerifiedSubscription(account(end: now.timeIntervalSince1970), verifiedAt: now, now: now))
+        XCTAssertFalse(AccountAccess.hasCurrentSubscription(account(active: false), now: now))
+        XCTAssertFalse(AccountAccess.hasCurrentSubscription(account(status: "past_due"), now: now))
+        XCTAssertFalse(AccountAccess.hasCurrentSubscription(account(end: now.timeIntervalSince1970), now: now))
         let encoded = try JSONEncoder().encode(account())
         try XCTAssertEqual(JSONDecoder().decode(SaveNestAccount.self, from: encoded), account())
     }
@@ -589,6 +594,8 @@ func XCTAssertThrowsError<T>(_ expression: @autoclosure () throws -> T) {
 }
 @main enum Checks {
     @MainActor static func main() async throws {
+        checkTabWorkspace()
+        try checkBrowserHistory()
         let tests = LibraryTests()
         tests.testTabCleanupPlanningIsConservativeAndDomainScoped()
         try tests.testBrowserTabPayloadsDecodeAndSaveTogether()
@@ -606,7 +613,7 @@ func XCTAssertThrowsError<T>(_ expression: @autoclosure () throws -> T) {
         try tests.testLegacyLibraryAndTagsRoundTrip()
         tests.testAnnotationOfExistingLinkPreservesIdentityAndState()
         tests.testSocialTitlesPreferContentAndHaveSpecificFallbacks()
-        try tests.testSubscriptionRequiresFreshVerifiedPaidAccess()
+        try tests.testSubscriptionStatusRequiresFreshServerVerification()
         tests.testSignInCallbackRejectsForgedOrAmbiguousURLs()
         tests.testReferralCallbackAcceptsOnlyOneSafeCode()
         tests.testPendingNativeCallbacksAreSingleUseAndBoundToStateAndAccount()

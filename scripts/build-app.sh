@@ -2,15 +2,24 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 configuration="${CONFIGURATION:-release}"
-swift build -c "$configuration"
-bin_dir="$(swift build -c "$configuration" --show-bin-path)"
+build_args=(-c "$configuration")
+if [[ -n "${SWIFT_SCRATCH_PATH:-}" ]]; then build_args+=(--scratch-path "$SWIFT_SCRATCH_PATH"); fi
+if [[ -n "${TARGET_ARCH:-}" ]]; then
+  case "$TARGET_ARCH" in arm64|x86_64) build_args+=(--arch "$TARGET_ARCH");; *) echo "TARGET_ARCH must be arm64 or x86_64" >&2; exit 1;; esac
+fi
+swift build "${build_args[@]}"
+bin_dir="$(swift build "${build_args[@]}" --show-bin-path)"
 source scripts/sparkle-common.sh
-app="build/SaveNest.app"
+app="${APP_PATH:-build/SaveNest.app}"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$bin_dir/SaveNest" "$app/Contents/MacOS/SaveNest"
 cp Resources/Info.plist "$app/Contents/Info.plist"
 # Local builds do not replace themselves with a public release.
 /usr/libexec/PlistBuddy -c 'Set :SaveNestUpdatesEnabled false' "$app/Contents/Info.plist"
+if [[ "${ELECTRON_HELPER:-0}" == "1" ]]; then
+  /usr/libexec/PlistBuddy -c 'Delete :CFBundleURLTypes' "$app/Contents/Info.plist"
+  /usr/libexec/PlistBuddy -c 'Add :LSUIElement bool true' "$app/Contents/Info.plist"
+fi
 swift scripts/make-icon.swift
 cp build/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"
 # Use a Developer ID identity for distribution; ad-hoc signing is for local use.
@@ -18,6 +27,7 @@ embed_sparkle "$app" "${SIGNING_IDENTITY:--}"
 signing_options=(--force --entitlements Resources/SaveNest.entitlements --sign "${SIGNING_IDENTITY:--}")
 # Ad-hoc local builds have no Team ID for hardened runtime library validation.
 if [[ -n "${SIGNING_IDENTITY:-}" && "$SIGNING_IDENTITY" != "-" ]]; then signing_options+=(--options runtime --timestamp); fi
+xattr -cr "$app"
 codesign "${signing_options[@]}" "$app"
 codesign --verify --deep --strict "$app"
-echo "Built $PWD/$app"
+echo "Built $app"

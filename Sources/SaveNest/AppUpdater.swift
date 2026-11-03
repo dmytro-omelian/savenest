@@ -17,6 +17,12 @@ final class AppUpdater: NSObject, ObservableObject, NSMenuItemValidation {
             unavailableReason = "Updates are disabled in SaveNest Preview."
             return
         }
+        // The embedded Swift helper must never apply a native Sparkle release
+        // over the Electron application, even if its plist is misconfigured.
+        guard !ProcessInfo.processInfo.arguments.contains("--electron-bridge") else {
+            unavailableReason = "Use SaveNest → Check & Download Updates in the application menu."
+            return
+        }
         guard Bundle.main.bundleIdentifier == "app.savenest.mac",
               Bundle.main.object(forInfoDictionaryKey: "SaveNestUpdatesEnabled") as? Bool == true else {
             unavailableReason = "Updates are available in the installed release of SaveNest."

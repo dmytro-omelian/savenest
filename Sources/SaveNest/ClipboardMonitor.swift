@@ -11,7 +11,7 @@ final class ClipboardMonitor {
         // Enabling never inspects clipboard contents copied before consent.
         changeCount = NSPasteboard.general.changeCount
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.check() }
+            Task { @MainActor [weak self] in self?.check() }
         }
     }
     func stop() { timer?.invalidate(); timer = nil }

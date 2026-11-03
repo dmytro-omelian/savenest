@@ -69,8 +69,8 @@ final class BrowserCapture {
             UserDefaults.standard.set(id, forKey: "lastCaptureBrowser")
         }
     }
-    func target() throws -> Browser {
-        let front = NSWorkspace.shared.frontmostApplication
+    func target(sourceApplication: NSRunningApplication? = nil) throws -> Browser {
+        let front = sourceApplication ?? NSWorkspace.shared.frontmostApplication
         let supported = Set(Browser.supported.map(\.id))
         // Do not silently capture Chrome while the user is trying to save a Firefox/other browser tab.
         if let id = front?.bundleIdentifier, !supported.contains(id), id != Bundle.main.bundleIdentifier {
@@ -119,9 +119,9 @@ final class BrowserCapture {
             return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) == "true"
         } catch { return false }
     }
-    func capture(allTabs: Bool, prepareClose: Bool = false, completion: @escaping (Result<CapturedTabs, Error>) -> Void) {
+    func capture(allTabs: Bool, prepareClose: Bool = false, sourceApplication: NSRunningApplication? = nil, completion: @escaping (Result<CapturedTabs, Error>) -> Void) {
         let browser: Browser
-        do { browser = try target() }
+        do { browser = try target(sourceApplication: sourceApplication) }
         catch { completion(.failure(error)); return }
         let processID = NSRunningApplication.runningApplications(withBundleIdentifier: browser.id).first?.processIdentifier ?? 0
         // Browser IDs come only from the allowlist. No page content is evaluated as code.

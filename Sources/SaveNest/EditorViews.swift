@@ -151,7 +151,7 @@ struct SettingsView: View {
     var onBack: () -> Void = {}
     var body: some View {
         ScrollView { VStack(alignment: .leading, spacing: 26) {
-            Button { onBack() } label: { Label("Library", systemImage: "chevron.left") }
+            Button { onBack() } label: { Label("All tabs", systemImage: "chevron.left") }
                 .buttonStyle(.plain).font(.system(size: 12, weight: .medium)).foregroundStyle(Color.muted)
             sheetHeading("Make yourself at home.", subtitle: "A few small things, just how you like them.")
             if let error = model.error { Text(error).font(.system(size: 11)).foregroundStyle(.red) }
@@ -175,7 +175,7 @@ struct SettingsView: View {
             Button("Archive all") {
                 model.setArchived(true, ids: ids)
                 archiveIDs = nil
-                model.section = .library
+                model.showLibrary?()
             }
         } message: { _ in
             Text("All saved links will move to Archive, including links hidden by filters. Your notes and tags stay with them. You can undo this.")
@@ -235,7 +235,8 @@ struct SettingsView: View {
                     .font(.system(size: 11)).foregroundStyle(Color.muted).fixedSize(horizontal: false, vertical: true)
                 OwnerUsageView(account: model.account)
             }.padding(20).nestSurface()
-            Button("Account & subscription…") { model.showAccount?() }.buttonStyle(QuietButton())
+            Link("Read the privacy policy ↗", destination: URL(string: "https://savenest.app/privacy")!).font(.system(size: 12))
+            Button("Account & Cloud…") { model.showAccount?() }.buttonStyle(QuietButton())
         case .capture:
             VStack(alignment: .leading, spacing: 12) {
                 fieldLabel("CLIPBOARD")

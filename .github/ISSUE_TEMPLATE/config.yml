@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Private security report
+    url: mailto:dima@omelabs.org
+    about: Do not publish vulnerabilities or personal information in issues.

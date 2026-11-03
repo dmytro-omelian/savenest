@@ -1,7 +1,7 @@
 import Foundation
 
 // Browser scripting IDs are opaque strings: Chrome returns text, Safari returns numbers.
-public struct OpenBrowserTab: Identifiable, Decodable {
+public struct OpenBrowserTab: Identifiable, Codable, Equatable {
     public let browserID: String
     public let browserName: String
     public let windowID: String
@@ -11,6 +11,11 @@ public struct OpenBrowserTab: Identifiable, Decodable {
     public let url: String
     public var id: String { "\(browserID):\(windowID):\(tabID):\(index)" }
     public var domain: String { URL(string: url)?.host?.replacingOccurrences(of: "www.", with: "") ?? url }
+    public var contextKey: String { id + "|" + url }
+    public init(browserID: String, browserName: String, windowID: String, tabID: String, index: Int, title: String, url: String) {
+        self.browserID = browserID; self.browserName = browserName; self.windowID = windowID
+        self.tabID = tabID; self.index = index; self.title = title; self.url = url
+    }
 }
 
 public struct BrowserTabSnapshot: Identifiable, Codable, Equatable {

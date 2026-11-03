@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SaveNest</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="launcher-model.js" defer></script>
+  <script src="renderer.js" defer></script>
+</head>
+<body>
+  <main id="launcher">
+    <header id="search-header">
+      <button id="back" class="icon-button" aria-label="Back to all results" title="Back" hidden>‹</button>
+      <span id="nest-mark" aria-hidden="true"></span>
+      <input id="search" type="text" placeholder="Search tabs, saved links, history, or commands…" aria-label="Search SaveNest" role="combobox" aria-autocomplete="list" aria-controls="results" aria-expanded="true" autocomplete="off" spellcheck="false" maxlength="2000">
+      <select id="scope" aria-label="Search scope"><option value="All">All</option><option value="Open">Open tabs</option><option value="Saved">Saved</option><option value="History">History</option><option value="Favorites">Favorites</option><option value="Notes">Notes</option><option value="Archive">Archive</option></select>
+    </header>
+    <header id="route-header" hidden><button id="route-back" class="icon-button" aria-label="Back">‹</button><div><span class="breadcrumb">SaveNest</span><h1 id="route-title">Save a link</h1></div><kbd>esc</kbd></header>
+    <div id="onboarding" class="hint-banner" hidden><span>One shortcut for your browser. Type to find a page, or choose a save action below.</span><button id="onboarding-done">Got it</button></div>
+    <aside id="usage-notice" hidden aria-label="Anonymous usage reporting">
+      <p id="usage-notice-text">Anonymous usage counts are on. No saved content, account IDs, or device IDs are sent.</p>
+      <div><button id="usage-off">Turn off</button><button id="usage-privacy">Privacy policy ↗</button><button id="usage-dismiss" aria-label="Dismiss usage notice">Dismiss</button></div>
+    </aside>
+    <section id="root-view" class="view"><div id="results" role="listbox" aria-label="Commands and pages" aria-busy="true"></div></section>
+    <section id="editor-view" class="view form-view" hidden>
+      <form id="editor-form">
+        <label>Link<input id="edit-url" type="url" placeholder="https://" required maxlength="16384"></label>
+        <label>Title<input id="edit-title" placeholder="Something worth keeping" maxlength="10000"></label>
+        <label>Note<textarea id="edit-note" rows="4" placeholder="Why is this worth keeping?" maxlength="100000"></textarea></label>
+        <label>Tags<input id="edit-tags" placeholder="Design, Read later" maxlength="5000"><span class="field-help">Separate tags with commas.</span></label>
+        <p id="editor-error" class="error" role="alert"></p>
+        <button id="editor-save" type="submit" hidden>Save link</button>
+      </form>
+    </section>
+    <section id="sources-view" class="view form-view" hidden>
+      <div class="source-summary"><div><h2>Find a page you visited.</h2><p>Search the last 90 days of browser history alongside open tabs and saved links.</p></div><label class="toggle"><input id="history-enabled" type="checkbox"> History search</label></div>
+      <div id="sources"></div>
+      <p class="privacy-note">Up to 2,000 recent records per profile, 20,000 pages total. Read locally; never uploaded or included in backups. Pause to clear history from SaveNest’s memory. Browser history stays unchanged.</p>
+      <div class="source-buttons"><button id="history-refresh">Refresh history</button><button id="history-access">Open macOS Privacy settings ↗</button></div>
+    </section>
+    <section id="selection-view" class="view form-view" hidden><p class="subtle">Choose the tabs to keep. Their browser tabs stay open.</p><div id="capture-tabs"></div></section>
+    <footer>
+      <button id="home" aria-label="Back to root search"><span class="footer-mark" aria-hidden="true">≋</span><span id="status">Starting SaveNest…</span></button>
+      <span id="preview" hidden>Preview</span>
+      <div class="footer-actions"><button id="primary">Open <kbd>↵</kbd></button><span class="separator"></span><button id="actions">Actions <kbd>⌘K</kbd></button></div>
+    </footer>
+    <div id="notice" role="status" hidden><span id="notice-text"></span><button id="dismiss-notice" aria-label="Dismiss message">×</button></div>
+  </main>
+  <dialog id="action-dialog" aria-labelledby="actions-title"><h2 id="actions-title">Actions</h2><p id="actions-context"></p><input id="action-search" placeholder="Search actions…" aria-label="Search actions" autocomplete="off"><div id="action-options"></div><div class="action-hint"><span><kbd>↑</kbd><kbd>↓</kbd> navigate</span><span><kbd>esc</kbd> back</span></div></dialog>
+  <dialog id="discard-dialog" aria-labelledby="discard-title"><h2 id="discard-title">Discard this draft?</h2><p>Your changes haven’t been saved.</p><div class="dialog-buttons"><button id="keep-editing" autofocus>Keep editing</button><button id="discard" class="danger">Discard draft</button></div></dialog>
+</body>
+</html>

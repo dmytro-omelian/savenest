@@ -1,6 +1,6 @@
 #!/bin/bash
 # Source from build scripts after changing to the repository root.
-sparkle_root="$PWD/.build/artifacts/sparkle/Sparkle"
+sparkle_root="${SWIFT_SCRATCH_PATH:-$PWD/.build}/artifacts/sparkle/Sparkle"
 sparkle_account="${SPARKLE_KEY_ACCOUNT:-app.savenest.mac}"
 
 embed_sparkle() {
@@ -11,6 +11,7 @@ embed_sparkle() {
   # ditto preserves the versioned framework symlinks and helper permissions.
   rm -rf "$framework"
   ditto "$sparkle_root/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework" "$framework"
+  xattr -cr "$framework"
   local signing_options=(--force --sign "$signing_identity")
   if [[ "$signing_identity" != "-" ]]; then signing_options+=(--options runtime --timestamp); fi
   # Sign from the inside out, preserving Sparkle's helper entitlements.
