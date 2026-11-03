@@ -88,8 +88,22 @@ enum ReaderCapture {
             "Your notes are ordinary Markdown files in an Obsidian vault. They stay yours, open in the tools you already use, and return when you revisit the same page.",
             "This preview uses a sample article and a disposable vault. Try a heading, a short list, or a few thoughts. Close the window and come back to see your note again."
         ]
-        let content = "<article><p class=\"reader-lede\">A quiet space between reading and understanding.</p><h2>Read, then make it yours</h2>" + paragraphs.prefix(2).map { "<p>\($0)</p>" }.joined() + "<blockquote>The value is in the thought you add.</blockquote><h2>Keep your words close</h2>" + paragraphs.suffix(2).map { "<p>\($0)</p>" }.joined() + "<ul><li>Write a question you want to explore.</li><li>Connect this page to something you already know.</li><li>Leave one useful sentence for your future self.</li></ul></article>"
-        return ["url": url, "title": title, "quickNote": quickNote, "article": ["title": title, "byline": "SaveNest sample article", "content": content, "textContent": paragraphs.joined(separator: "\n\n")]]
+        let firstSection = paragraphs.prefix(2).map { "<p>\($0)</p>" }.joined()
+        let secondSection = paragraphs.suffix(2).map { "<p>\($0)</p>" }.joined()
+        let content = [
+            "<article><p class=\"reader-lede\">A quiet space between reading and understanding.</p><h2>Read, then make it yours</h2>",
+            firstSection,
+            "<blockquote>The value is in the thought you add.</blockquote><h2>Keep your words close</h2>",
+            secondSection,
+            "<ul><li>Write a question you want to explore.</li><li>Connect this page to something you already know.</li><li>Leave one useful sentence for your future self.</li></ul></article>"
+        ].joined()
+        let article: [String: Any] = [
+            "title": title,
+            "byline": "SaveNest sample article",
+            "content": content,
+            "textContent": paragraphs.joined(separator: "\n\n")
+        ]
+        return ["url": url, "title": title, "quickNote": quickNote, "article": article]
     }
 }
 
