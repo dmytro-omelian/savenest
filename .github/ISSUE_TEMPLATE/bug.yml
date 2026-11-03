@@ -1,0 +1,21 @@
+name: Bug report
+description: Report an unexpected behavior using non-sensitive examples.
+body:
+  - type: input
+    id: version
+    attributes:
+      label: SaveNest and macOS versions
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: What happened?
+      description: Include steps, expected behavior, and actual behavior. Remove personal links, notes, emails, and tokens.
+    validations:
+      required: true
+  - type: textarea
+    id: checks
+    attributes:
+      label: Relevant checks or screenshots
+      description: Use sample data. Report vulnerabilities privately via SECURITY.md.

@@ -5,7 +5,6 @@ struct LibraryView: View {
     @ObservedObject var model: AppModel
     @FocusState private var searchFocused: Bool
     @State private var now = Date()
-    @AppStorage("hasSeenUsageNotice") private var hasSeenUsageNotice = false
     @State private var bulkAction: BulkAction?
     private struct BulkAction: Identifiable {
         let id = UUID()
@@ -26,14 +25,13 @@ struct LibraryView: View {
         VStack(spacing: 0) {
             toolbar
             if !model.onboardingCompleted { onboardingBanner }
-            if !model.isPreview { AccountBanner(account: model.account, openAccount: { model.showAccount?() }) }
-            if !hasSeenUsageNotice && !model.isPreview {
+            if model.analyticsEnabled && !model.hasSeenUsageNotice && !model.isPreview {
                 HStack(alignment: .top, spacing: 10) {
-                    Text("New: anonymous usage counts help improve SaveNest. Your links and notes stay on this Mac.")
+                    Text("Anonymous usage counts are on. No saved content, account IDs, or device IDs are sent.")
                         .font(.system(size: 11)).foregroundStyle(Color.muted)
-                    Button("Settings") { hasSeenUsageNotice = true; model.showSettings?() }.buttonStyle(.link)
-                    Button("Turn off") { model.analyticsEnabled = false; hasSeenUsageNotice = true }.buttonStyle(.link)
-                    Button { hasSeenUsageNotice = true } label: { Image(systemName: "xmark") }.buttonStyle(.plain).accessibilityLabel("Dismiss usage notice")
+                    Link("Privacy policy", destination: URL(string: "https://savenest.app/privacy")!).buttonStyle(.link)
+                    Button("Turn off") { model.dismissUsageNotice(disable: true) }.buttonStyle(.link)
+                    Button { model.dismissUsageNotice() } label: { Image(systemName: "xmark") }.buttonStyle(.plain).accessibilityLabel("Dismiss usage notice")
                 }.padding(14).background(Color.sage.opacity(0.08)).padding(.horizontal, 26).padding(.top, 10)
             }
             filters

@@ -1,35 +1,91 @@
 # SaveNest for Mac
 
-A small native Mac app for saving browser tabs. Press **⌘⇧K**, keep browsing, and find your links later in a quiet list grouped by **Today**, **Yesterday**, and older dates.
+A free, MIT-licensed Mac app for saving and finding browser pages from one **⌘O launcher**, built with Electron and a local Swift helper. No account or subscription is required for local features.
 
-Built with SwiftUI and AppKit. Email sign-in and Stripe subscriptions are managed by savenest.app; links and notes remain local. Optional anonymous usage counts help improve the app; there is no browser extension. Sparkle handles signed in-app updates. Rounded library cards and a floating action rail take their visual direction from [One](https://getone.one). Settings → Appearance offers the original cream and sage palette or the charcoal and emerald palette; black is the default. The choice applies immediately throughout the app and is remembered across launches.
+[Website](https://savenest.app) · [Privacy](https://savenest.app/privacy) · [Contributing](CONTRIBUTING.md) · [Launch status](docs/launch-status.md) · [Security](SECURITY.md)
+
+Press **⌘O**, then type. Commands, open tabs, saved links, notes, tags, and recent browser history share one search. **Enter** runs the selected command, switches to an open tab, or opens a saved/visited page. **⌘K** shows actions for that result. Pasting a URL offers **Save this link**. Saving with a note and choosing multiple tabs happen inside the same panel.
+
+The floating launcher opens on the display containing the pointer, including over fullscreen apps, and stays out of the Dock. Click elsewhere to hide it. Escape closes actions, goes back from an editor or scope, then dismisses root search. Unsaved edits require an explicit discard. The launcher remembers context for 60 seconds; after that it resets root search unless a draft is open. **⌘O** toggles it. The old **⌘⇧O** default migrates automatically; custom shortcuts remain unchanged and can be edited through the searchable Settings command.
+
+Account, Settings, sharing, and system dialogs retain their native implementation and are reachable from root search. Optional email sign-in and existing billing management are handled by savenest.app; links and notes remain local. Existing saved links and Keychain sessions use the same storage, with no conversion. Settings → Appearance changes both interfaces. [Design rationale and primary-source research](docs/launcher-design.md).
+
+### Browser history
+
+History search reads local Chrome/Chromium-family, Firefox, and Safari databases without modifying them. It indexes up to 2,000 recent records per profile from the last 90 days, across at most 30 profiles, with a 20,000-URL memory cap. Standard profile locations for Chrome/Beta, Brave, Edge, Arc, Vivaldi, Chromium, Opera, Firefox, and Safari are supported. External/custom profile locations and Safari profile layouts outside the standard history database are not scanned.
+
+History remains in memory, is never uploaded or exported, and is refreshed on opening (at most once per minute) or explicitly via **Refresh tabs and history**. Failed reads clear that source’s old results and show an access/format error. **Browser history sources** shows connected profiles and a pause control that cancels reads and clears the cache. macOS may require file access for protected browser folders; SaveNest does not change those permissions.
+
+A URL found in multiple sources becomes one result with its source labels. If it is open, Enter switches to that tab. Separate open instances remain distinct so profiles/windows are not confused. Title and keyword relevance rank before page-context matches; abbreviated single-word titles are also supported. History-only results can be saved, annotated, or opened like other pages.
 
 ## Run
 
-Requires macOS 14 or later and Apple's Swift command-line tools (Swift 5.9+).
+Requires macOS 14 or later, Node.js 22.12+ with npm, and Apple's Swift command-line tools (Swift 5.9+).
 
 ```sh
-./scripts/build-app.sh
-open build/SaveNest.app
+npm ci
+npm start
 ```
 
-The script creates an ad-hoc-signed app for the current Mac architecture. Move `build/SaveNest.app` to Applications if you want to keep it installed. Public builds launched from Downloads, a disk image, or another folder offer to move themselves to Applications and reopen there; development and Preview builds do not. Launch the app at least once before using its shortcut. Closing the library leaves SaveNest running in the menu bar; Quit stops capture.
+`npm start` builds the native helper and launches Electron with the existing library. Quit other copies of SaveNest first. Closing the window keeps the app in the menu bar; Quit also stops the helper and global shortcuts.
 
-## Account and beta pricing
+```sh
+npm run preview       # Sample library in memory; no browser capture or analytics
+swift run SaveNestChecks # Core data, privacy, authentication and browser checks
+npm test              # Electron command, sender, launcher and updater checks
+npm run test:smoke    # Real Electron + native helper, using sample data
+npm run build         # Local macOS application in dist/SaveNest-darwin-<architecture>/
+```
 
-Choose **SaveNest → Account**, enter your email in the app, and choose **Email me a sign-in link**. Open the email on the same Mac and confirm it; the browser returns to SaveNest automatically. There is no password. The app stores its session token and the short-lived pending sign-in only in macOS Keychain, never in library backups or preferences. This pending request survives an app restart and can be completed by another installed copy of SaveNest, which avoids losing sign-in when macOS routes the link to a different copy.
+The smoke test covers root commands, scoped/page-context/history search, URL capture, inline note capture, multi-tab selection, dirty-draft protection, keyboard actions, history pause/resume, archive/restore, delete/undo, save-and-close, literal rendering of untrusted titles, renderer isolation, window toggling, and helper shutdown. It writes `build/launcher-preview.png` and `build/launcher-actions.png`. Preview uses sample visits and never reads real browser history or registers global shortcuts.
 
-Saving requires an active subscription:
+The ordinary `npm run build` output is a **local development build** for the current architecture. Maintainers use the signed Electron release workflow below for public distribution. Sparkle is disabled in the helper so it cannot replace Electron with a legacy native release. Existing `scripts/package-release.sh` packages only the legacy native application.
 
-- **SaveNest:** $1.99/month or $19.99/year for new live subscriptions. One plan includes every feature; cancel anytime. Existing $4.99 and $5 monthly subscribers keep their price. The owner-only sandbox keeps its $1.99 monthly test price.
+### Electron boundaries
 
-Enter active promotion codes on the hosted Stripe Checkout page. Stripe shows the discount and its terms before payment. SaveNest does not accept or pre-apply codes. Existing server-confirmed BETA trials keep their recorded access, while new redemptions use the promotion terms configured in Stripe. Cancel from Account → Manage billing.
+- The renderer loads four fixed bundled assets through `savenest-ui://app`, with a restrictive content policy, process sandboxing, context isolation, and no Node access. All navigation, popups, webviews, and permission requests are blocked.
+- A narrow preload bridge accepts validated app actions from the main frame only. Login callbacks enter through the Electron main process, then pass to the native account controller for existing state/PKCE validation. Tokens never enter the renderer.
+- The Swift helper remains the sole writer of `~/Library/Application Support/SaveNest/library.json`. Existing atomic writes, damaged-library protection, local write protection, tab identity checks, and local search remain in use.
+- Electron includes All, Open, Saved, History, Favorites, Notes, and Archive scopes. Use **⌘K** for actions, **⌘1–9** to run a result, **⌘S** to save a page, **⌘E** to edit, **⌘N** to add, and **⌘Return** to save an editor. **Control-Tab** cycles scopes; **Shift-Space** marks a page for bulk actions.
+- Email sharing, tag management, and cleanup review open in native dialogs. The primary Electron UI is a nonactivating floating panel with inline capture, editing, and selection. Row swipe gestures remain specific to the legacy native interface.
 
-Plan selection stays in the Account screen. SaveNest opens Stripe only for the secure card/payment step, then the website returns to the app. SaveNest checks server-verified access every five seconds for up to 15 minutes after opening Stripe, even without a browser callback. Checks resume when you return to the app or reopen Account, including after a restart. Returning to the app requests fresh server access instead of the two-minute cache. A valid checkout return also retries for up to one minute if payment confirmation is delayed. **Stop waiting** cancels local checks without changing a payment; **Refresh access** remains available as a fallback and forces a server check. A **Sandbox · test payments only** label identifies a Stripe sandbox account. Use card `4242 4242 4242 4242`, any future expiration, and any CVC; no real payment is taken in sandbox.
+### Signed Electron releases
 
-The server checks paid access; a checkout redirect alone does not unlock the app. The app rechecks before saving when the last successful check is more than two minutes old, after the paid period ends, and when returning to the app. No subscription entitlement is saved to disk. Network failures after that brief in-memory lease prevent new saves until verification succeeds. Existing links remain available to open, search, copy, archive, delete, and export when signed out or unsubscribed. Saving new links, notes, tags, title edits, and imports requires verified access.
+Maintainers with existing Apple release credentials can run:
 
-The API is fixed to `https://savenest.app`. The browser callback carries a single-use authorization code and state, exchanged with a cryptographically random PKCE verifier. A magic link opened in any browser returns through the app URL handler and must match the Keychain-backed, one-use sign-in state. Checkout and billing returns have their own account-bound, expiring state. Cancelling clears the relevant pending state. Unsolicited callbacks and replays are ignored. Native bearer requests do not follow redirects. Private Stripe and email keys stay on the website server. Signing out revokes the current server session when online and removes the local token.
+```sh
+SIGNING_IDENTITY='Developer ID Application: Dmytro Omelian (444G89GLZD)' \
+NOTARY_PROFILE='savenest-notary' npm run release:electron
+```
+
+This builds both Apple Silicon (`arm64`) and Intel (`x64`) helpers and Electron apps, signs and notarizes each, and stages ZIPs plus release metadata under `build/releases/electron/<version>/`. Signable bundles live in a temporary workspace outside Desktop/iCloud to prevent file-provider metadata invalidating signatures. The local workspace path is recorded alongside the artifacts and is not published.
+
+Verify each ZIP before publication:
+
+```sh
+node scripts/check-electron-package.mjs build/releases/electron/0.11.0/SaveNest-0.11.0-macOS-arm64.zip arm64
+node scripts/check-electron-package.mjs build/releases/electron/0.11.0/SaveNest-0.11.0-macOS-x64.zip x64
+```
+
+Publish versioned ZIPs to the matching GitHub release only after verification. Copy each architecture's `RELEASES.json` to the website at `/downloads/electron/<architecture>/RELEASES.json`, after its referenced public ZIP exists. Update the download page and architecture choices together. Do not overwrite a published version's ZIP or advertise an artifact that is still private.
+
+**Check & Download Updates…** uses Electron's signed macOS updater and a separate architecture-specific feed. Checks and downloads are user-initiated. Installation/restart requires confirmation and a fresh check that no native or launcher draft/work is active. Squirrel verifies the downloaded application's signing identity. The old native Sparkle feed remains separate; native users quit the old app and download the Electron release manually. Both use the same local library and Keychain services, and startup rejects a second library writer.
+
+Build/signature/notarization checks do not substitute for Intel runtime testing or an installed-to-installed update test. Record those separately in the release issue.
+
+To run the retained native application directly, use `./scripts/build-app.sh` and `open build/SaveNest.app`. The remaining sections document the native services and legacy interface in detail.
+
+## Free, Cloud, and accounts
+
+**SaveNest Free** includes every local feature: unlimited saves within your Mac’s storage, notes, tags, search, browser tools, imports, exports, and existing sharing. Saving and editing work offline and without an account. Damaged-library protection still prevents overwriting an unreadable library.
+
+**SaveNest Cloud** is planned at **$4.99/month or $49.90/year** for optional, end-to-end encrypted backup, sync across Macs, and recovery. It is **not available yet**, and new checkout is disabled. No cloud storage capacity, retention period, or delivery date is promised. Team collaboration is a separate future offering; [book a demo](https://cal.com/dmytro-omelian/savenest-demo) to discuss your workflow.
+
+The desktop source, including future cloud-client code, uses MIT. The hosted backend is separate and is not included here. You do not need server credentials or a production account to build or use the desktop app.
+
+Account is optional and remains available to manage existing billing. Email sign-in uses one-use state and PKCE; tokens stay in macOS Keychain, outside renderer state and library exports. Signing out keeps all local features available. The server remains responsible for billing state; a browser redirect never grants a paid service entitlement.
+
+The launch transition stops existing renewals during the gap, credits unused prepaid time, and preserves previous monthly/yearly rates for an explicit future Cloud upgrade. See the [launch tracker](https://github.com/dmytro-omelian/savenest/issues/13) for verified rollout status. Do not interpret this source change as evidence that live billing has already been migrated.
 
 ## Capture
 
@@ -45,7 +101,7 @@ Use **SaveNest → Settings** (**⌘,**) to record each shortcut separately:
 | Save with a note | ⌘⌥K |
 | Save selected tabs | ⌘⌃⇧K |
 | Save all tabs in the current window | ⌘⌥⇧K |
-| Search open tabs | ⌘⇧O |
+| Open SaveNest launcher | ⌘O |
 | Close duplicate tabs | ⌘⇧D |
 
 Settings → **After saving** can close the source tab after Save link or Save with a note. Save-only is the default; your choice is remembered. Closing happens only after a successful library write or confirmed editor save (including a link already saved), and only for the originally captured browser tab. A navigated, missing, or ambiguous tab is left open with a saved-but-not-closed notice. Selected-tab and whole-window capture always keep tabs open.
@@ -62,7 +118,7 @@ Direct capture adapters: Safari, Safari Technology Preview, Chrome, Chrome Beta,
 
 ## Clipboard, importance, and usage counts
 
-Settings → Clipboard → **Offer to save copied links** is off by default. Enable it to offer Save or Add note when you copy a single HTTP(S) URL. Monitoring starts with the next clipboard change; it ignores previously copied contents, prose, credentials in URLs, private/transient/generated pasteboard types, and links already saved (including Archive). The offer lasts 12 seconds and never takes keyboard focus. It saves the URL shown by that offer even if you copy something else. Turning monitoring off dismisses any offer. **Save copied link** in File or the menu bar works without continuous monitoring. Normal verified subscription access still applies.
+Settings → Clipboard → **Offer to save copied links** is off by default. Enable it to offer Save or Add note when you copy a single HTTP(S) URL. Monitoring starts with the next clipboard change; it ignores previously copied contents, prose, credentials in URLs, private/transient/generated pasteboard types, and links already saved (including Archive). The offer lasts 12 seconds and never takes keyboard focus. It saves the URL shown by that offer even if you copy something else. Turning monitoring off dismisses any offer. **Save copied link** in File or the menu bar works without continuous monitoring. No account or subscription is needed.
 
 The **Review importance** rail button is visible but disabled while this feature is being redesigned.
 
@@ -72,13 +128,13 @@ Settings also offers an optional shortcut preset: **⇧⌘K** saves and **⇧⌘
 
 The service aggregates by UTC day, retaining approximately 90 days of counts and seven days of upload receipts. Ordinary network information (including IP address) reaches the hosting provider but is not stored in the usage tables. These are best-effort action totals, not unique-user, retention, or revenue metrics. In Settings → Anonymous usage, the verified owner account `dima@omelabs.org` can load the last 30 days; server authorization independently enforces that exact identity. Preview mode sends no analytics and does not monitor the clipboard.
 
-## Open-tab search
+## Browser tab adapters
 
-Press **⌘⇧O** from any app to open only the compact tab switcher, without activating SaveNest or raising the library. Clicking outside the switcher dismisses it. Search words across tab titles, URLs, and browser names; title matches rank first. **↑/↓** selects, **Return** switches to the existing tab, **⌘1–9** jumps directly, and **Escape** closes the panel. The shortcut is configurable in Settings. The list refreshes on opening and can be refreshed manually; cached results remain searchable during refresh. Safari and the supported Chromium adapters expose tabs in their open windows. Hidden Safari tab groups, Firefox, and embedded browser views are not included. All matching tabs from every scriptable Safari and Chrome window, including windows in different profiles, appear in one scrollable list, with ⌘1–9 shortcuts for the first nine. Use the bookmark button beside a result to save that specific tab without switching browsers; it stays open. Tab titles and URLs remain in memory unless you explicitly save a result.
+Open tabs participate in the main **⌘O** search. Choose **Search open tabs** or the Open tabs scope to narrow results. Titles rank above URLs and browser names. Results refresh on opening; cached pages remain searchable while browsers respond. Safari and the supported Chromium adapters expose tabs across scriptable windows and profiles. Hidden Safari tab groups, Firefox tabs, and embedded browser views are not included. Firefox history is supported separately. Use **⌘S** or **⌘K → Save to library** to save a tab without switching browsers. Tab titles and URLs remain in memory unless explicitly saved.
 
 **⌘⇧D** closes exact duplicate web addresses within each supported browser window and removes known empty/new-tab pages. It keeps an active duplicate when the browser exposes that state and otherwise keeps the first copy. Separate windows and browser profiles are left independent, URLs with different queries or fragments remain separate, and tabs that move or navigate before closing are left open. This shortcut overlaps Chromium’s Bookmark all tabs command and can be changed in Settings.
 
-## Library
+## Native library interface (legacy reference)
 
 - A floating rail gives direct access to Library, Tags, open-tab search, Add link, Account, and Settings. Date groups sit in rounded cards; notes and tags stay with their links. Editors, onboarding, capture feedback, and tab search share the selected appearance.
 - Links are grouped by local calendar date, newest first.
@@ -121,7 +177,7 @@ Forty Swift checks cover library persistence, dates, browser selection, legacy m
 
 Run `./scripts/preview-app.sh` to open a separate **SaveNest Preview** app with an in-memory sample library. The preview has its own app identity, does not register account callbacks, and does not load or write the saved library or register global shortcuts. The fixture is also available by running `.build/debug/SaveNest --ui-preview` directly from a terminal.
 
-## Distribution
+## Legacy native distribution
 
 This repository produces a local development build. Public downloads need a Developer ID signature and Apple notarization. The build script accepts `SIGNING_IDENTITY` for your Developer ID certificate. It embeds the Automation entitlement and browser-access usage description. No developer credentials are included.
 

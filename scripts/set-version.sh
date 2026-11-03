@@ -14,4 +14,19 @@ if (( build_number <= current_build )); then
 fi
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" Resources/Info.plist
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" Resources/Info.plist
+if [[ -f package.json ]]; then
+  node - "$version" <<'NODE'
+const fs = require('node:fs');
+const version = process.argv[2];
+const manifest = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+manifest.version = version;
+fs.writeFileSync('package.json', JSON.stringify(manifest, null, 2) + '\n');
+if (fs.existsSync('package-lock.json')) {
+  const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+  lock.version = version;
+  if (lock.packages?.['']) lock.packages[''].version = version;
+  fs.writeFileSync('package-lock.json', JSON.stringify(lock, null, 2) + '\n');
+}
+NODE
+fi
 echo "SaveNest $version ($build_number). Add Resources/ReleaseNotes/$version.html before packaging."

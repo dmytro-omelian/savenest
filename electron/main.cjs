@@ -1,0 +1,206 @@
+'use strict';
+const { app, BrowserWindow, Menu, Tray, nativeImage, ipcMain, protocol, session, dialog, screen, autoUpdater } = require('electron');
+const path = require('node:path');
+const fs = require('node:fs/promises');
+const { NativeClient } = require('./native-client.cjs');
+const { createUpdater, canRestartSafely } = require('./updater.cjs');
+const { APP_URL, validateCommand, trustedSender, assetName } = require('./contracts.cjs');
+
+const preview = !app.isPackaged && process.argv.includes('--preview');
+const smoke = preview && process.argv.includes('--smoke-test');
+const root = path.join(__dirname, '..');
+app.setName(preview ? 'SaveNest Preview' : 'SaveNest');
+app.setPath('userData', preview ? path.join(root, 'build', smoke ? 'electron-test-profile' : 'electron-preview-profile') : path.join(app.getPath('appData'), 'SaveNest Electron'));
+app.enableSandbox();
+protocol.registerSchemesAsPrivileged([{ scheme: 'savenest-ui', privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
+
+let win, tray, native, updater, latestState, fatalError, quitting = false;
+let currentView = 'root';
+let hiddenAt = 0, showing = false, modalDepth = 0, blurTimer;
+const callbacks = [];
+
+function send(event) { if (win && !win.isDestroyed()) win.webContents.send('savenest:event', event); }
+function position() {
+  const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
+  const [width, height] = win.getSize();
+  win.setPosition(Math.round(area.x + (area.width - width) / 2), Math.round(area.y + Math.min(area.height * 0.2, Math.max(16, area.height - height - 24))));
+}
+async function show() {
+  if (!win || win.isDestroyed() || showing) return;
+  if (win.isVisible()) { win.focus(); send({ event: 'focus', reset: false }); return; }
+  showing = true;
+  if (native && !fatalError) await command({ command: 'panelWillShow' });
+  position(); win.show(); win.focus(); showing = false;
+  send({ event: 'focus', reset: Boolean(hiddenAt && Date.now() - hiddenAt > 60000) });
+  if (native && !fatalError) { void command({ command: 'resume' }); void command({ command: 'synchronize' }); }
+}
+function hide(restore = false) {
+  if (!win || win.isDestroyed()) return;
+  hiddenAt = Date.now(); win.hide();
+  if (native && !fatalError) {
+    void command({ command: 'suspend' });
+    if (restore) void command({ command: 'restoreFocus' });
+  }
+}
+function toggle() {
+  if (win?.isVisible() && win.isFocused()) hide(true);
+  else void show();
+}
+async function command(input) {
+  try { return await native.request(input); }
+  catch (error) { send({ event: 'error', message: error.message }); return false; }
+}
+function incomingURL(url) {
+  if (preview || typeof url !== 'string' || url.length > 16384 || !url.startsWith('savenest://')) return;
+  if (native && latestState) void command({ command: 'callback', url });
+  else if (callbacks.length < 10) callbacks.push(url);
+}
+app.on('open-url', (event, url) => { event.preventDefault(); incomingURL(url); });
+
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', (_event, argv) => { argv.filter(v => v.startsWith('savenest://')).forEach(incomingURL); show(); });
+  app.on('activate', show);
+  app.on('window-all-closed', () => {});
+  app.on('before-quit', () => { quitting = true; native?.stop(); tray?.destroy(); });
+  app.whenReady().then(start).catch(error => { dialog.showErrorBox('SaveNest could not start', error.message); app.exit(1); });
+}
+
+async function start() {
+  if (process.platform !== 'darwin') throw new Error('SaveNest currently requires macOS 14 or later.');
+  app.dock?.hide();
+  session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+  session.defaultSession.setPermissionCheckHandler(() => false);
+  protocol.handle('savenest-ui', async request => {
+    const name = assetName(request.url);
+    if (!name || request.method !== 'GET') return new Response('Not found', { status: 404 });
+    const types = { 'index.html': 'text/html', 'launcher-model.js': 'text/javascript', 'renderer.js': 'text/javascript', 'styles.css': 'text/css' };
+    return new Response(await fs.readFile(path.join(__dirname, 'renderer', name)), {
+      headers: { 'Content-Type': types[name], 'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" }
+    });
+  });
+  win = new BrowserWindow({
+    width: 760, height: 520, show: false, frame: false, type: 'panel',
+    resizable: false, minimizable: false, maximizable: false, fullscreenable: false,
+    alwaysOnTop: true, skipTaskbar: true, roundedCorners: true, hasShadow: true,
+    title: preview ? 'SaveNest Preview' : 'SaveNest', backgroundColor: '#17181b',
+    webPreferences: { preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, webviewTag: false }
+  });
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('will-navigate', event => event.preventDefault());
+  win.webContents.on('will-attach-webview', event => event.preventDefault());
+  win.webContents.on('render-process-gone', () => {
+    fatalError = 'The window stopped responding. Quit and reopen SaveNest.';
+    dialog.showErrorBox('SaveNest', fatalError);
+  });
+  win.on('close', event => { if (!quitting) { event.preventDefault(); hide(true); } });
+  win.on('blur', () => {
+    clearTimeout(blurTimer);
+    blurTimer = setTimeout(() => { if (!smoke && !modalDepth && !win.isFocused()) hide(); }, 120);
+  });
+  win.on('focus', () => { if (native && latestState) void command({ command: 'synchronize' }); });
+  ipcMain.handle('savenest:command', async (event, input) => {
+    if (!trustedSender(event, win.webContents)) throw new Error('Untrusted SaveNest window.');
+    const request = validateCommand(input);
+    if (fatalError) throw new Error(fatalError);
+    if (request.command === 'dismiss') { hide(true); return true; }
+    if (request.command === 'view') {
+      currentView = request.view;
+      const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
+      const height = request.view === 'editor' ? 610 : 520;
+      win.setSize(Math.min(760, area.width - 32), Math.min(height, area.height - 48));
+      return true;
+    }
+    if (request.command === 'snapshot' && latestState) send({ event: 'state', state: latestState });
+    if (['delete', 'close'].includes(request.command)) {
+      const ids = request.ids || [];
+      const eligible = latestState?.rows.filter(row => ids.includes(row.id) && (request.command === 'delete' ? row.isSaved : row.isOpen)) || [];
+      if (!eligible.length) return false;
+      const deleting = request.command === 'delete';
+      modalDepth += 1;
+      let choice;
+      try { choice = await dialog.showMessageBox(win, {
+        type: 'warning', message: `${deleting ? 'Delete' : 'Close'} ${eligible.length} ${deleting ? 'saved link(s)' : 'browser tab(s)'}?`,
+        detail: deleting ? 'The saved notes and tags will be removed. Undo remains available until the next library change.' : 'Unsaved changes in these browser tabs may be lost.',
+        buttons: ['Cancel', deleting ? 'Delete' : 'Close tabs'], defaultId: 0, cancelId: 0
+      }); } finally { modalDepth -= 1; }
+      if (choice.response !== 1) return false;
+    }
+    return native.request(request);
+  });
+  updater = createUpdater({ app, autoUpdater, dialog,
+    release: app.isPackaged && require('../package.json').saveNestRelease === true,
+    canRestart: async () => {
+      if (!native || fatalError) return false;
+      try { await native.request({ command: 'snapshot' }); } catch { return false; }
+      return canRestartSafely({ view: currentView, state: latestState, failed: Boolean(fatalError) });
+    },
+    beforeInstall: () => { quitting = true; native?.stop(); }
+  });
+  createMenu();
+  const helper = app.isPackaged ? path.join(process.resourcesPath, 'SaveNest.app') : path.join(root, 'build/electron-native/SaveNest.app');
+  native = new NativeClient(path.join(helper, 'Contents/MacOS/SaveNest'), { preview });
+  native.on('event', message => {
+    if (message.event === 'state') {
+      latestState = message.state;
+      while (callbacks.length) void command({ command: 'callback', url: callbacks.shift() });
+    }
+    if (message.event === 'show') void show();
+    else if (message.event === 'toggle') toggle();
+    else if (message.event === 'hide') hide();
+    else if (message.event === 'quit' && !quitting && !smoke) app.quit();
+    else send(message);
+  });
+  native.on('failure', message => { if (!quitting) { fatalError = message; send({ event: 'fatal', message }); } });
+  await win.loadURL(APP_URL);
+  if (fatalError) send({ event: 'fatal', message: fatalError });
+  if (!smoke) {
+    const iconPath = path.join(helper, 'Contents/Resources/AppIcon.icns');
+    const icon = nativeImage.createFromPath(iconPath).resize({ width: 18, height: 18 });
+    if (!icon.isEmpty()) {
+      tray = new Tray(icon); tray.setToolTip('SaveNest');
+      tray.setContextMenu(Menu.buildFromTemplate([
+        { label: 'Open SaveNest', click: show },
+        { label: 'Save current tab', click: () => void command({ command: 'capture', action: 'quick' }) },
+        { label: 'Save with a note…', click: () => void command({ command: 'capture', action: 'note' }) },
+        { type: 'separator' },
+        { label: 'Account…', click: () => void command({ command: 'account' }) },
+        { label: 'Settings…', click: () => void command({ command: 'settings' }) },
+        { role: 'quit' }
+      ]));
+    }
+  }
+  if (app.isPackaged) app.setAsDefaultProtocolClient('savenest');
+  await show();
+  if (smoke) {
+    try { await require('./smoke.cjs').run({ win, native, root, show, toggle }); console.log('Electron launcher checks passed.'); quitting = true; app.exit(0); }
+    catch (error) { console.error(error); native.stop(); app.exit(1); }
+  }
+}
+
+function createMenu() {
+  const action = (label, name, accelerator) => ({ label, accelerator, click: () => void command({ command: name }) });
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    { label: 'SaveNest', submenu: [
+      { role: 'about' }, { label: 'Check & Download Updates…', enabled: updater.enabled, click: () => void updater.check() }, action('Account…', 'account'), action('Settings…', 'settings', 'Command+,'),
+      { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }
+    ] },
+    { label: 'File', submenu: [
+      { label: 'Add link…', accelerator: 'Command+N', click: () => { show(); send({ event: 'add' }); } },
+      { label: 'Save current tab', click: () => void command({ command: 'capture', action: 'quick' }) },
+      { label: 'Save with a note…', click: () => void command({ command: 'capture', action: 'note' }) },
+      { label: 'Save selected tabs…', click: () => void command({ command: 'capture', action: 'selected' }) },
+      { label: 'Save browser window', click: () => void command({ command: 'capture', action: 'window' }) },
+      { type: 'separator' }, action('Import backup…', 'import'), action('Export backup…', 'export'), { role: 'close' }
+    ] },
+    { label: 'Edit', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }, action('Undo library change', 'undo', 'Command+Shift+Z')] },
+    { label: 'View', submenu: [
+      { label: 'Search', accelerator: 'Command+F', click: () => { show(); send({ event: 'focus' }); } },
+      action('Refresh tabs', 'refresh', 'Command+R'), { role: 'togglefullscreen' }
+    ] },
+    { label: 'Tools', submenu: [action('Manage tags…', 'tags'), action('Clean up tabs…', 'cleanup'), { label: 'Close duplicate tabs', click: () => void command({ command: 'capture', action: 'duplicates' }) }] },
+    { label: 'Window', submenu: [{ role: 'minimize' }, { role: 'zoom' }, { label: 'Open SaveNest', click: show }] }
+  ]));
+}

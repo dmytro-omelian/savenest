@@ -26,13 +26,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private var toastPanel: NSPanel?
     private var toastDismiss: DispatchWorkItem?
     private var pendingURLs: [URL] = []
+    private var electronBridge: ElectronBridge?
+    private var librarySession: LibrarySessionLock?
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.regular)
+        let isElectron = ProcessInfo.processInfo.arguments.contains("--electron-bridge")
+        if isElectron && ProcessInfo.processInfo.arguments.contains("--ui-preview") && !AppLaunch.isPreview {
+            ElectronBridge.failStartup("Preview requires a debug helper. Run npm run build:native first.")
+            NSApp.terminate(nil); return
+        }
+        NSApp.setActivationPolicy(isElectron ? .accessory : .regular)
         NSApp.appearance = AppAppearance.saved.nativeAppearance
-        if pendingURLs.isEmpty && ApplicationMover.offerMoveIfNeeded() { return }
+        if !isElectron && pendingURLs.isEmpty && ApplicationMover.offerMoveIfNeeded() { return }
+        if isElectron && !AppLaunch.isPreview {
+            let otherCopy = NSWorkspace.shared.runningApplications.contains {
+                $0.bundleIdentifier == Bundle.main.bundleIdentifier && $0.processIdentifier != ProcessInfo.processInfo.processIdentifier
+            }
+            if otherCopy {
+                ElectronBridge.failStartup("Quit the other SaveNest app, then reopen this one. Only one app can write your library.")
+                NSApp.terminate(nil); return
+            }
+        }
+        if !AppLaunch.isPreview {
+            do { librarySession = try LibrarySessionLock() }
+            catch {
+                if isElectron { ElectronBridge.failStartup(error.localizedDescription) }
+                else { let alert = NSAlert(); alert.messageText = error.localizedDescription; alert.runModal() }
+                NSApp.terminate(nil); return
+            }
+        }
         model = AppModel()
         model.showTabSearch = { [weak self] in self?.openTabSearch() }
-        model.tabSearch.close = { [weak self] in self?.tabSearchPanel?.orderOut(nil) }
+        model.tabSearch.close = { [weak self] in self?.tabSearchPanel?.orderOut(nil); self?.model.tabSearch.suspend() }
         model.showLibrary = { [weak self] in self?.openLibrary() }
         model.showAccount = { [weak self] in self?.openAccount() }
         model.account.presentationWindow = { [weak self] in self?.libraryWindow }
@@ -42,14 +66,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         model.closeCaptureEditor = { [weak self] in self?.closeCaptureEditor() }
         model.showTabSelection = { [weak self] draft in self?.openTabSelection(draft) }
         model.closeTabSelection = { [weak self] in self?.closeTabSelection() }
-        model.showToast = { [weak self] message in self?.presentToast(message) }
+        model.showToast = { [weak self] message in
+            guard self?.electronBridge?.panelVisible != true else { return }
+            self?.presentToast(message)
+        }
         model.dismissClipboardNotice = { [weak self] in
             guard self?.model.toast?.clipboardURL != nil else { return }
             self?.toastPanel?.orderOut(nil); self?.model.toast = nil
         }
-        let root = AppRootView(model: model)
+        let root = AppRootView(model: model).modifier(ElectronUtilitySheets(model: model, enabled: isElectron))
         libraryWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 750, height: 680), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
-        libraryWindow.title = model.isPreview ? "SaveNest Preview — Sample library" : "SaveNest"; libraryWindow.titleVisibility = .hidden
+        libraryWindow.title = model.isPreview ? "SaveNest Preview — Settings" : "SaveNest Settings"; libraryWindow.titleVisibility = .hidden
         libraryWindow.titlebarAppearsTransparent = true; libraryWindow.isReleasedWhenClosed = false
         libraryWindow.backgroundColor = NSColor(Color.paper)
         let libraryContent = NSHostingView(rootView: root)
@@ -59,13 +86,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         libraryWindow.minSize = NSSize(width: 640, height: 520)
         if !model.isPreview { libraryWindow.setFrameAutosaveName("SaveNest.MinimalLibrary") }
         libraryWindow.center()
-        setupMenus(); setupStatusItem(); openLibrary()
-        model.updater.start()
+        setupMenus()
+        if isElectron {
+            electronBridge = ElectronBridge(model: model)
+            model.tabSearch.close = { [weak self] in self?.electronBridge?.event("hide"); self?.model.tabSearch.suspend() }
+            electronBridge?.start()
+        } else {
+            setupStatusItem(); openLibrary()
+            model.updater.start()
+        }
         let launchURLs = pendingURLs
         pendingURLs.removeAll()
         for url in launchURLs { model.account.handleIncomingURL(url) }
         if !model.isPreview { Task { await model.account.synchronizeLogin() } }
-        if model.shortcutError != nil { openSettings() }
+        if model.shortcutError != nil && !isElectron { openSettings() }
     }
     func application(_ application: NSApplication, open urls: [URL]) {
         guard model != nil else { pendingURLs.append(contentsOf: urls); return }
@@ -75,31 +109,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         if model != nil && !model.isPreview { Task { await model.account.synchronizeLogin() } }
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+    func applicationWillTerminate(_ notification: Notification) { electronBridge?.event("quit") }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool { openLibrary(); return true }
-    @objc func openLibrary() { libraryWindow.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
+    @objc func openLibrary() {
+        if electronBridge != nil && model.cleanupReview != nil { openSettings(); return }
+        libraryWindow.orderOut(nil); openTabSearch()
+    }
     @objc private func openTabSearch() {
+        if let electronBridge { electronBridge.event("show"); return }
         if tabSearchPanel == nil {
             let panel = TabSearchPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-            panel.title = "Search open tabs"; panel.titleVisibility = .hidden
+            panel.title = model.isPreview ? "SaveNest Preview" : "SaveNest"; panel.titleVisibility = .hidden
             panel.titlebarAppearsTransparent = true; panel.isReleasedWhenClosed = false
             panel.level = .floating; panel.hidesOnDeactivate = false
             panel.isOpaque = false; panel.backgroundColor = .clear; panel.hasShadow = true
             panel.isMovableByWindowBackground = true
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            panel.contentView = NSHostingView(rootView: TabSearchView(model: model.tabSearch))
+            let content = NSHostingView(rootView: TabSearchView(app: model, model: model.tabSearch))
+            content.sizingOptions = []
+            panel.contentView = content
+            panel.setContentSize(NSSize(width: 720, height: 650))
+            panel.onDismiss = { [weak self] in self?.model.tabSearch.suspend() }
+            panel.dismissOnResign = !model.isPreview
+            panel.keyHandler = { [weak self] event in self?.model.workspaceKeyHandler?(event) ?? false }
             panel.center(); tabSearchPanel = panel
         }
-        model.tabSearch.query = ""; model.tabSearch.refresh()
-        // Take keyboard focus without activating SaveNest and raising its library windows.
+        if tabSearchPanel?.isVisible == true {
+            tabSearchPanel?.makeKeyAndOrderFront(nil)
+            NotificationCenter.default.post(name: .focusSearch, object: nil)
+            return
+        }
+        model.tabSearch.query = ""; model.tabSearch.updateLibrary(model.library.links); model.tabSearch.refresh()
+        // Take keyboard focus without raising Settings or switching Spaces.
         tabSearchPanel?.makeKeyAndOrderFront(nil)
     }
     @objc func openSettings() {
         model.section = .settings
-        openLibrary()
+        tabSearchPanel?.orderOut(nil); model.tabSearch.suspend()
+        libraryWindow.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
     }
     @objc func openAccount() {
         model.section = .account
-        openLibrary()
+        tabSearchPanel?.orderOut(nil); model.tabSearch.suspend()
+        libraryWindow.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
         if !model.isPreview { Task { await model.account.synchronizeLogin() } }
     }
     @objc private func captureTab() { model.capture(action: .quick) }
@@ -148,7 +200,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             if window === tabSelectionPanel { model.cancelTabSelection() }
         }
     }
-    @objc private func addLink() { openLibrary(); model.presentAdd() }
+    @objc private func addLink() {
+        openLibrary()
+        if let electronBridge { electronBridge.event("add") } else { model.presentAdd() }
+    }
     @objc private func focusSearch() { openLibrary(); NotificationCenter.default.post(name: .focusSearch, object: nil) }
     @objc private func exportLibrary() { model.exportLibrary() }
     @objc private func importLibrary() { model.importLibrary() }
@@ -171,7 +226,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         if let image = NSImage(systemSymbolName: "square.stack.3d.up", accessibilityDescription: "SaveNest") { image.isTemplate = true; statusItem.button?.image = image }
         let menu = NSMenu()
         menu.addItem(item("Open SaveNest", #selector(openLibrary)))
-        menu.addItem(item("Search open tabs…", #selector(openTabSearch)))
         menu.addItem(item("Close duplicate tabs", #selector(closeDuplicateTabs)))
         menu.addItem(item("Clean up tabs…", #selector(cleanUpTabs)))
         menu.addItem(.separator())
@@ -194,11 +248,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         app.addItem(NSMenuItem(title: "Quit SaveNest", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         let appRoot = NSMenuItem(); appRoot.submenu = app; main.addItem(appRoot)
         let file = NSMenu(title: "File")
-        file.addItem(item("Search Open Tabs…", #selector(openTabSearch)))
+        file.addItem(item("Search Tabs & Saved Links…", #selector(openTabSearch)))
         file.addItem(item("Close Duplicate Tabs", #selector(closeDuplicateTabs)))
         file.addItem(item("Clean Up Tabs…", #selector(cleanUpTabs)))
         file.addItem(item("Save Copied Link", #selector(saveClipboard)))
-        file.addItem(item("Add Link…", #selector(addLink), key: "n")); file.addItem(item("Open Library", #selector(openLibrary), key: "0"))
+        file.addItem(item("Add Link…", #selector(addLink), key: "n")); file.addItem(item("Open SaveNest", #selector(openLibrary), key: "0"))
         file.addItem(.separator()); file.addItem(item("Save Current Browser Tab", #selector(captureTab))); file.addItem(item("Save with a Note…", #selector(captureNote))); file.addItem(item("Save Selected Tabs…", #selector(captureSelected))); file.addItem(item("Save Browser Window", #selector(captureWindow)))
         file.addItem(.separator()); file.addItem(item("Import Backup…", #selector(importLibrary))); file.addItem(item("Export Backup…", #selector(exportLibrary)))
         file.addItem(.separator()); file.addItem(NSMenuItem(title: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w"))
@@ -249,9 +303,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 private final class TabSearchPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+    var onDismiss: (() -> Void)?
+    var dismissOnResign = true
+    var keyHandler: ((NSEvent) -> Bool)?
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if keyHandler?(event) == true { return true }
+        return super.performKeyEquivalent(with: event)
+    }
     override func resignKey() {
         super.resignKey()
-        orderOut(nil)
+        // Sheets take key focus. Keep their parent visible until editing finishes.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.dismissOnResign, !self.isKeyWindow, self.attachedSheet == nil,
+                  !(self.childWindows ?? []).contains(where: { $0.isKeyWindow }) else { return }
+            self.orderOut(nil); self.onDismiss?()
+        }
     }
 }
 

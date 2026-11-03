@@ -35,16 +35,24 @@ public struct SaveNestAccount: Codable, Equatable {
 }
 
 public enum AccountAccess {
-    /// Only an in-memory, recently verified response grants access. No entitlement is persisted to disk.
-    public static let maximumAge: TimeInterval = 120
-    public static func allowsSaving(_ account: SaveNestAccount?, verifiedAt: Date?, now: Date = Date()) -> Bool {
-        guard let account, let verifiedAt, now >= verifiedAt,
-              now.timeIntervalSince(verifiedAt) < maximumAge,
+    /// Server account data can still describe a current paid subscription even when
+    /// its short in-memory verification lease has expired.
+    public static func hasCurrentSubscription(_ account: SaveNestAccount?, now: Date = Date()) -> Bool {
+        guard let account,
               account.subscription.active, ["active", "trialing"].contains(account.subscription.status),
               ["sandbox", "live"].contains(account.subscription.mode),
               ["monthly", "yearly"].contains(account.subscription.plan ?? ""),
               let periodEnd = account.subscription.renewsAt, periodEnd > now.timeIntervalSince1970 else { return false }
         return true
+    }
+
+    /// Historical billing status requires recent server verification. Local library features do not use this check.
+    /// No subscription entitlement is persisted to disk.
+    public static let maximumAge: TimeInterval = 120
+    public static func hasVerifiedSubscription(_ account: SaveNestAccount?, verifiedAt: Date?, now: Date = Date()) -> Bool {
+        guard let verifiedAt, now >= verifiedAt,
+              now.timeIntervalSince(verifiedAt) < maximumAge else { return false }
+        return hasCurrentSubscription(account, now: now)
     }
 
     /// A payment problem should recover the existing subscription, not create another one.
