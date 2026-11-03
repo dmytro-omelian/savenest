@@ -2,6 +2,8 @@
 
 Describe what changes for the user and why.
 
+Related issue (if any):
+
 ## Validation
 
 List checks actually run and their results. Distinguish preview or mocked tests from installed-app verification.

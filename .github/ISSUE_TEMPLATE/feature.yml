@@ -1,6 +1,9 @@
 name: Feature request
 description: Describe a workflow and the problem you need to solve.
 body:
+  - type: markdown
+    attributes:
+      value: Search existing issues first. Describe the workflow you want to improve; a feature request does not guarantee implementation.
   - type: textarea
     id: problem
     attributes:

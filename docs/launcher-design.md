@@ -21,10 +21,17 @@ The references below were checked on October 30, 2026. These are interaction pri
 - **Empty query:** show Save current tab, Save with a note, Add a link, then available open/saved/recent-history pages. Suggestions use existing local data; searches themselves are not logged.
 - **Typed text:** rank title/word matches above URL, notes, and optional page context. Single-word title abbreviations provide a restrained fallback. Commands rank exact names and prefixes first.
 - **Same URL across sources:** one page result contains its saved annotations and history metadata; an open tab takes precedence for Enter. Multiple live instances remain distinct because activating the wrong browser profile would be worse than showing two tabs.
-- **Saving:** current-tab capture keeps the native browser identity checks and subscription authorization. Note drafts and selected-tab lists use the Electron panel. Existing saved records retain their original dates and archive state.
+- **Saving:** current-tab capture keeps the native browser identity and damaged-library checks. Local saving does not require an account or subscription. Note drafts and selected-tab lists use the Electron panel. Existing saved records retain their original dates and archive state.
 - **Actions:** Command-K opens a searchable panel. Arrow keys and Enter work there as they do in root search. Destructive close/delete actions retain confirmation. Shift-Space marks pages for bulk actions.
 - **Focus:** the panel floats over normal and fullscreen windows without a Dock entry. Clicking elsewhere hides it without pulling focus back. Explicit dismissal restores the previous app. Confirmations keep the panel visible; unfinished drafts survive hiding.
 - **No false success:** blocked saves keep the editor or selection. Browser history permission/format failures are visible in History Sources. Helper failures disable data actions and retain a clear error.
+
+## Process boundaries
+
+- The Electron renderer loads bundled assets through `savenest-ui://app`, with a restrictive content policy, sandboxing, context isolation, and no Node access. Navigation, popups, webviews, and permission requests are blocked.
+- The preload bridge accepts validated actions from the main frame only. Login callbacks pass through Electron to the native controller for state and PKCE validation. Tokens never enter renderer state.
+- The Swift helper is the sole writer of the local library. It preserves atomic writes, damaged-library protection, and browser-tab identity checks.
+- Settings, account management, email sharing, tag management, and cleanup review retain native dialogs.
 
 ## History boundaries
 

@@ -1,21 +1,55 @@
 name: Bug report
 description: Report an unexpected behavior using non-sensitive examples.
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Search existing issues before reporting a bug. Use sample data and remove personal URLs, notes, email addresses, and tokens.
+        Report vulnerabilities privately through [SECURITY.md](https://github.com/dmytro-omelian/savenest/blob/main/SECURITY.md).
   - type: input
     id: version
     attributes:
       label: SaveNest and macOS versions
+      placeholder: "SaveNest 0.11.0, macOS 14.7 (or a source commit)"
+    validations:
+      required: true
+  - type: dropdown
+    id: architecture
+    attributes:
+      label: Mac processor
+      options:
+        - Apple Silicon
+        - Intel
+        - Not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: app_mode
+    attributes:
+      label: How are you running SaveNest?
+      options:
+        - Downloaded app
+        - Source preview (npm run preview)
+        - Source app (npm start)
+        - Other (describe below)
     validations:
       required: true
   - type: textarea
     id: reproduction
     attributes:
       label: What happened?
-      description: Include steps, expected behavior, and actual behavior. Remove personal links, notes, emails, and tokens.
+      description: Include the browser and version if this involves capture, tabs, or history.
+      value: |
+        Steps to reproduce:
+        1.
+
+        Expected behavior:
+
+        Actual behavior:
     validations:
       required: true
   - type: textarea
     id: checks
     attributes:
       label: Relevant checks or screenshots
-      description: Use sample data. Report vulnerabilities privately via SECURITY.md.
+      description: Include relevant errors, checks you ran, or screenshots with sample data. Do not attach a real library or browser database.
