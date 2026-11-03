@@ -1,6 +1,7 @@
 (function (root) {
   'use strict';
   const catalog = [
+    { id: 'read-current', title: 'Read & note current tab', detail: 'Read a page beside its Obsidian note', symbol: 'reader', command: 'readerCurrent', keywords: 'read reader preview obsidian markdown notes current tab', home: true },
     { id: 'save-current', title: 'Save current tab', detail: 'Keep the page you were just viewing', symbol: 'bookmark', command: 'capture', action: 'quick', keywords: 'save bookmark capture current page', home: true },
     { id: 'save-note', title: 'Save with a note', detail: 'Capture the current tab and add a thought', symbol: 'note', command: 'capture', action: 'note', keywords: 'save note annotate current page', home: true },
     { id: 'add-link', title: 'Add a link', detail: 'Paste a URL, add notes and tags', symbol: 'plus', ui: 'add', keywords: 'new add save link url bookmark', home: true },

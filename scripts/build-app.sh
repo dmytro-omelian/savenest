@@ -2,6 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 configuration="${CONFIGURATION:-release}"
+if [[ "${ELECTRON_HELPER:-0}" == "1" ]]; then node scripts/build-ui.mjs; fi
 build_args=(-c "$configuration")
 if [[ -n "${SWIFT_SCRATCH_PATH:-}" ]]; then build_args+=(--scratch-path "$SWIFT_SCRATCH_PATH"); fi
 if [[ -n "${TARGET_ARCH:-}" ]]; then
@@ -14,6 +15,9 @@ app="${APP_PATH:-build/SaveNest.app}"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$bin_dir/SaveNest" "$app/Contents/MacOS/SaveNest"
 cp Resources/Info.plist "$app/Contents/Info.plist"
+if [[ -f node_modules/@mozilla/readability/Readability.js ]]; then
+  cp node_modules/@mozilla/readability/Readability.js "$app/Contents/Resources/ReaderReadability.js"
+fi
 # Local builds do not replace themselves with a public release.
 /usr/libexec/PlistBuddy -c 'Set :SaveNestUpdatesEnabled false' "$app/Contents/Info.plist"
 if [[ "${ELECTRON_HELPER:-0}" == "1" ]]; then

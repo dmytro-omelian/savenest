@@ -66,6 +66,7 @@ for (const directory of apps) {
   await mkdir(notices, { recursive: true });
   await cp('node_modules/electron/dist/LICENSE', path.join(notices, 'Electron-LICENSE.txt'));
   await cp('node_modules/electron/dist/LICENSES.chromium.html', path.join(notices, 'LICENSES.chromium.html'));
+  await cp('build/reader-third-party-licenses.txt', path.join(notices, 'reader-third-party-licenses.txt'));
   await cp(path.resolve(process.env.SWIFT_SCRATCH_PATH || '.build', 'artifacts/sparkle/Sparkle/LICENSE'), path.join(notices, 'Sparkle-LICENSE.txt'));
 
   await flipFuses(app, { version: FuseVersion.V1,

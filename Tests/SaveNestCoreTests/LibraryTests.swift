@@ -596,6 +596,7 @@ func XCTAssertThrowsError<T>(_ expression: @autoclosure () throws -> T) {
     @MainActor static func main() async throws {
         checkTabWorkspace()
         try checkBrowserHistory()
+        try runNoteFileChecks()
         let tests = LibraryTests()
         tests.testTabCleanupPlanningIsConservativeAndDomainScoped()
         try tests.testBrowserTabPayloadsDecodeAndSaveTogether()

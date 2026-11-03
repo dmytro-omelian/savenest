@@ -5,16 +5,18 @@ const fs = require('node:fs/promises');
 const { NativeClient } = require('./native-client.cjs');
 const { createUpdater, canRestartSafely } = require('./updater.cjs');
 const { APP_URL, validateCommand, trustedSender, assetName } = require('./contracts.cjs');
+const { ReadingWorkspace } = require('./workspace.cjs');
 
 const preview = !app.isPackaged && process.argv.includes('--preview');
 const smoke = preview && process.argv.includes('--smoke-test');
+const readerLive = preview && !smoke && process.argv.includes('--reader-live');
 const root = path.join(__dirname, '..');
-app.setName(preview ? 'SaveNest Preview' : 'SaveNest');
-app.setPath('userData', preview ? path.join(root, 'build', smoke ? 'electron-test-profile' : 'electron-preview-profile') : path.join(app.getPath('appData'), 'SaveNest Electron'));
+app.setName(readerLive ? 'SaveNest Reader Test' : preview ? 'SaveNest Preview' : 'SaveNest');
+app.setPath('userData', preview ? path.join(root, 'build', smoke ? 'electron-test-profile' : readerLive ? 'electron-reader-test-profile' : 'electron-preview-profile') : path.join(app.getPath('appData'), 'SaveNest Electron'));
 app.enableSandbox();
 protocol.registerSchemesAsPrivileged([{ scheme: 'savenest-ui', privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
 
-let win, tray, native, updater, latestState, fatalError, quitting = false;
+let win, tray, native, updater, workspace, latestState, fatalError, quitting = false, preparingQuit = false;
 let currentView = 'root';
 let hiddenAt = 0, showing = false, modalDepth = 0, blurTimer;
 const callbacks = [];
@@ -47,6 +49,10 @@ function toggle() {
   else void show();
 }
 async function command(input) {
+  if (['readerCurrent', 'readerOpen'].includes(input.command)) {
+    try { return await workspace.open(input); }
+    catch (error) { send({ event: 'error', message: error.message }); return false; }
+  }
   try { return await native.request(input); }
   catch (error) { send({ event: 'error', message: error.message }); return false; }
 }
@@ -63,7 +69,19 @@ if (!app.requestSingleInstanceLock()) {
   app.on('second-instance', (_event, argv) => { argv.filter(v => v.startsWith('savenest://')).forEach(incomingURL); show(); });
   app.on('activate', show);
   app.on('window-all-closed', () => {});
-  app.on('before-quit', () => { quitting = true; native?.stop(); tray?.destroy(); });
+  app.on('before-quit', event => {
+    if (!quitting && (workspace?.busy || (workspace?.window && !workspace.window.isDestroyed()))) {
+      event.preventDefault();
+      if (preparingQuit) return;
+      preparingQuit = true;
+      void workspace.prepareToQuit().then(saved => {
+        if (saved) { quitting = true; app.quit(); }
+        else { workspace.send({ event: 'flushCancelled' }); workspace.window?.focus(); }
+      }).finally(() => { preparingQuit = false; });
+      return;
+    }
+    quitting = true; workspace?.destroy(); native?.stop(); tray?.destroy();
+  });
   app.whenReady().then(start).catch(error => { dialog.showErrorBox('SaveNest could not start', error.message); app.exit(1); });
 }
 
@@ -75,9 +93,13 @@ async function start() {
   protocol.handle('savenest-ui', async request => {
     const name = assetName(request.url);
     if (!name || request.method !== 'GET') return new Response('Not found', { status: 404 });
-    const types = { 'index.html': 'text/html', 'launcher-model.js': 'text/javascript', 'renderer.js': 'text/javascript', 'styles.css': 'text/css' };
+    const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
+    const workspaceAsset = name.startsWith('workspace.');
+    const policy = workspaceAsset
+      ? "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: http:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+      : "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
     return new Response(await fs.readFile(path.join(__dirname, 'renderer', name)), {
-      headers: { 'Content-Type': types[name], 'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" }
+      headers: { 'Content-Type': types[path.extname(name)], 'Content-Security-Policy': policy }
     });
   });
   win = new BrowserWindow({
@@ -105,6 +127,7 @@ async function start() {
     if (!trustedSender(event, win.webContents)) throw new Error('Untrusted SaveNest window.');
     const request = validateCommand(input);
     if (fatalError) throw new Error(fatalError);
+    if (['readerCurrent', 'readerOpen'].includes(request.command)) return workspace.open(request);
     if (request.command === 'dismiss') { hide(true); return true; }
     if (request.command === 'view') {
       currentView = request.view;
@@ -133,7 +156,7 @@ async function start() {
   updater = createUpdater({ app, autoUpdater, dialog,
     release: app.isPackaged && require('../package.json').saveNestRelease === true,
     canRestart: async () => {
-      if (!native || fatalError) return false;
+      if (!native || fatalError || workspace?.busy) return false;
       try { await native.request({ command: 'snapshot' }); } catch { return false; }
       return canRestartSafely({ view: currentView, state: latestState, failed: Boolean(fatalError) });
     },
@@ -141,13 +164,17 @@ async function start() {
   });
   createMenu();
   const helper = app.isPackaged ? path.join(process.resourcesPath, 'SaveNest.app') : path.join(root, 'build/electron-native/SaveNest.app');
-  native = new NativeClient(path.join(helper, 'Contents/MacOS/SaveNest'), { preview });
+  native = new NativeClient(path.join(helper, 'Contents/MacOS/SaveNest'), { preview, readerLive });
+  workspace = new ReadingWorkspace({ native, preview: preview && !readerLive, userData: app.getPath('userData'), appearance: () => latestState?.appearance || 'black', onOpen: () => hide() });
   native.on('event', message => {
     if (message.event === 'state') {
       latestState = message.state;
+      workspace.send({ event: 'appearance', appearance: latestState.appearance });
       while (callbacks.length) void command({ command: 'callback', url: callbacks.shift() });
     }
-    if (message.event === 'show') void show();
+    if (message.event === 'readerCurrent') void command({ command: 'readerCurrent' });
+    else if (message.event === 'readerSource') void workspace.openSource(message.source).catch(error => send({ event: 'error', message: error.message }));
+    else if (message.event === 'show') void show();
     else if (message.event === 'toggle') toggle();
     else if (message.event === 'hide') hide();
     else if (message.event === 'quit' && !quitting && !smoke) app.quit();
@@ -163,6 +190,7 @@ async function start() {
       tray = new Tray(icon); tray.setToolTip('SaveNest');
       tray.setContextMenu(Menu.buildFromTemplate([
         { label: 'Open SaveNest', click: show },
+        { label: 'Read & note current tab', click: () => void command({ command: 'readerCurrent' }) },
         { label: 'Save current tab', click: () => void command({ command: 'capture', action: 'quick' }) },
         { label: 'Save with a note…', click: () => void command({ command: 'capture', action: 'note' }) },
         { type: 'separator' },
@@ -174,8 +202,14 @@ async function start() {
   }
   if (app.isPackaged) app.setAsDefaultProtocolClient('savenest');
   await show();
+  if (preview && process.argv.includes('--reader') && !smoke) await workspace.open({ command: 'readerCurrent' });
   if (smoke) {
-    try { await require('./smoke.cjs').run({ win, native, root, show, toggle }); console.log('Electron launcher checks passed.'); quitting = true; app.exit(0); }
+    try {
+      await require('./workspace-smoke.cjs').run({ workspace, native, root });
+      await show();
+      await require('./smoke.cjs').run({ win, native, root, show, toggle });
+      console.log('Electron launcher and reading workspace checks passed.'); quitting = true; app.exit(0);
+    }
     catch (error) { console.error(error); native.stop(); app.exit(1); }
   }
 }
@@ -188,6 +222,7 @@ function createMenu() {
       { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }
     ] },
     { label: 'File', submenu: [
+      { label: 'Read & note current tab', click: () => void command({ command: 'readerCurrent' }) },
       { label: 'Add link…', accelerator: 'Command+N', click: () => { show(); send({ event: 'add' }); } },
       { label: 'Save current tab', click: () => void command({ command: 'capture', action: 'quick' }) },
       { label: 'Save with a note…', click: () => void command({ command: 'capture', action: 'note' }) },
@@ -197,7 +232,7 @@ function createMenu() {
     ] },
     { label: 'Edit', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }, action('Undo library change', 'undo', 'Command+Shift+Z')] },
     { label: 'View', submenu: [
-      { label: 'Search', accelerator: 'Command+F', click: () => { show(); send({ event: 'focus' }); } },
+      { label: 'Search', accelerator: 'Command+F', click: () => { if (workspace?.window?.isFocused()) workspace.send({ event: 'find' }); else { show(); send({ event: 'focus' }); } } },
       action('Refresh tabs', 'refresh', 'Command+R'), { role: 'togglefullscreen' }
     ] },
     { label: 'Tools', submenu: [action('Manage tags…', 'tags'), action('Clean up tabs…', 'cleanup'), { label: 'Close duplicate tabs', click: () => void command({ command: 'capture', action: 'duplicates' }) }] },
