@@ -36,4 +36,4 @@ The feed is `https://savenest.app/downloads/appcast.xml`. Sparkle verifies updat
 
 Version 0.9.3 (build 26) introduces the updater. Users on 0.9.2 or earlier need one manual installation. Publishing a feed alone cannot add an updater to their old app.
 
-Maintainers must keep the legacy Sparkle feed separate from Electron releases. See [maintainer notes](maintainers.md).
+The Sparkle feed can offer the specially prepared Electron preview starting with 0.11.1 (build 35). It must preserve the existing EdDSA public key, carry an archive signature from that key, and use an increasing numeric build. Ordinary Electron archives must not be inserted without these checks. Subsequent Electron updates use its separate Squirrel feed. See [maintainer notes](maintainers.md).

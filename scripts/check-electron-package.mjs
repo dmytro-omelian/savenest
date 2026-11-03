@@ -16,11 +16,22 @@ try {
   const app = path.join(temporary, 'SaveNest.app');
   const helper = path.join(app, 'Contents/Resources/SaveNest.app');
   const plist = (bundle, key) => run('/usr/libexec/PlistBuddy', ['-c', `Print :${key}`, path.join(bundle, 'Contents/Info.plist')]);
+  const nativeValue = key => run('/usr/libexec/PlistBuddy', ['-c', `Print :${key}`, 'Resources/Info.plist']);
   const version = plist(app, 'CFBundleShortVersionString');
+  const build = nativeValue('CFBundleVersion');
+  const publicKey = nativeValue('SUPublicEDKey');
+  assert.match(build, /^[1-9]\d*$/, 'The native build number must be a positive integer.');
+  assert.equal(Buffer.from(publicKey, 'base64').length, 32, 'The Sparkle Ed25519 public key must contain 32 bytes.');
+  assert.equal(Buffer.from(publicKey, 'base64').toString('base64'), publicKey, 'The Sparkle public key must be canonical base64.');
+  assert.equal(version, nativeValue('CFBundleShortVersionString'));
   assert.equal(plist(app, 'CFBundleIdentifier'), 'app.savenest.electron');
   assert.equal(plist(helper, 'CFBundleIdentifier'), 'app.savenest.mac');
   assert.equal(plist(helper, 'CFBundleShortVersionString'), version);
-  assert.equal(plist(helper, 'SaveNestUpdatesEnabled'), 'false');
+  for (const bundle of [app, helper]) {
+    assert.equal(plist(bundle, 'CFBundleVersion'), build, 'Outer app, helper and native source must use the same numeric build.');
+    assert.equal(plist(bundle, 'SUPublicEDKey'), publicKey, 'Outer app, helper and native source must preserve the Sparkle public key.');
+    assert.equal(plist(bundle, 'SaveNestUpdatesEnabled'), 'false', 'The Electron app and embedded helper must not activate Sparkle.');
+  }
   const cpu = architecture === 'x64' ? 'x86_64' : 'arm64';
   run('lipo', [path.join(app, 'Contents/MacOS/SaveNest'), '-verify_arch', cpu]);
   run('lipo', [path.join(helper, 'Contents/MacOS/SaveNest'), '-verify_arch', cpu]);
@@ -41,6 +52,6 @@ try {
   let rejected = false;
   try { run('codesign', ['--verify', '--deep', '--strict', app]); } catch { rejected = true; }
   assert.equal(rejected, true, 'A modified app archive must fail signature verification.');
-  console.log(JSON.stringify({ archive: path.resolve(archive), architecture, version, sha256,
-    checks: ['matching versions', 'correct architectures', 'signature', 'stapled notarization', 'Gatekeeper', 'helper updater disabled', 'licenses', 'tamper rejection'] }, null, 2));
+  console.log(JSON.stringify({ archive: path.resolve(archive), architecture, version, build, sha256,
+    checks: ['matching versions and numeric builds', 'Sparkle public-key continuity', 'correct architectures', 'signature', 'stapled notarization', 'Gatekeeper', 'native updater disabled', 'licenses', 'tamper rejection'] }, null, 2));
 } finally { await rm(temporary, { recursive: true, force: true }); }
