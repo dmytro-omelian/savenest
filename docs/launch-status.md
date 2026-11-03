@@ -1,6 +1,6 @@
 # SaveNest launch status
 
-Updated 2026-11-03. [GitHub launch tracker](https://github.com/dmytro-omelian/savenest/issues/13) is the shared source for dependencies and completion. Local code, passing checks, and public release are separate states.
+Updated 2026-11-03. [GitHub launch tracker](https://github.com/dmytro-omelian/savenest/issues/13) is the shared source for dependencies and completion. Local code, passing checks, and public release are separate states. **0.11.0 is a signed preview; full launch remains pending.** The owner chose preview distribution because an isolated installed-app test environment is unavailable.
 
 ## Launch gate
 
@@ -11,13 +11,15 @@ A first-time user can download the signed app, understand its privacy behavior, 
 | Simplify capture and finding links | Verified in preview | Unified ⌘O launcher, inline notes/tags and tab selection; real Electron smoke passes with sample data. Live browser permission checks remain. [#14](https://github.com/dmytro-omelian/savenest/issues/14) |
 | Make every local feature free | Implemented and tested locally | Local writes no longer depend on subscription verification; signed-out sample capture/edit checks pass. Ship the free release. [#15](https://github.com/dmytro-omelian/savenest/issues/15) |
 | Privacy and analytics controls | Implemented locally | Shared native/Electron notice and opt-out; preview reporting blocked. Website policy and published-app review in progress. [#17](https://github.com/dmytro-omelian/savenest/issues/17) |
-| Open source and contribution path | In progress | MIT, contribution/security docs, templates and CI prepared. Gitleaks found no secrets in 34 commits or current source snapshot. Publication and remote CI remain. [#16](https://github.com/dmytro-omelian/savenest/issues/16) |
-| Signed public release and safe updates | In progress | Apple signing/notarization credentials available; Apple Silicon and Intel packaging underway. [#18](https://github.com/dmytro-omelian/savenest/issues/18) |
+| Open source and contribution path | Public | MIT, contribution/security docs, templates and CI merged in [#23](https://github.com/dmytro-omelian/savenest/pull/23). Source/history secret scans passed. Clean-clone macOS CI passes. Hosted backend remains separate. [#16](https://github.com/dmytro-omelian/savenest/issues/16) |
+| Signed public release and safe updates | Preview in preparation | Apple Silicon notarized and extracted-archive checks pass; Intel packaging underway. Installed-app and live-update checks remain. [#18](https://github.com/dmytro-omelian/savenest/issues/18) |
 | Landing page, current app visuals and GitHub stars | In progress | Update current tabs/launcher story, real sample screenshot, repository link and hourly star cache. [#19](https://github.com/dmytro-omelian/savenest/issues/19) |
-| Free/Cloud pricing and subscriber transition | Partly blocked | New checkout disabled in local source. Live Stripe connection needs reauthentication before renewal/credit reconciliation. [#20](https://github.com/dmytro-omelian/savenest/issues/20) |
+| Free/Cloud pricing and subscriber transition | Billing reconciled; website prepared | Existing renewals stopped, collection paused, historical rates preserved for explicit future Cloud opt-in. Live invoice/refund reconciliation found no unused paid balance to credit. New checkout is disabled in prepared source; public endpoint verification remains. [#20](https://github.com/dmytro-omelian/savenest/issues/20) |
 | Teams demo booking | Live | [Book a SaveNest demo](https://cal.com/dmytro-omelian/savenest-demo). 30 minutes; existing availability; calendar title uses the guest's name followed by `/ Dima (Savenest demo)`. No test invitation sent. |
 
 Do not mark the launch complete until the public download, repository, privacy page, website pricing and subscriber transition are verified together. Passing preview checks does not establish installed-app or live-payment behavior.
+
+The [preview acceptance checklist](preview-acceptance.md) records remaining isolated upgrade, offline save/edit/import/export/restart, analytics network, browser permission, Intel runtime, and installed-to-installed update tests. No test was run against the owner's primary library or Keychain.
 
 ## Product decisions
 

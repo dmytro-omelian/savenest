@@ -4,6 +4,8 @@ A free, MIT-licensed Mac app for saving and finding browser pages from one **⌘
 
 [Website](https://savenest.app) · [Privacy](https://savenest.app/privacy) · [Contributing](CONTRIBUTING.md) · [Launch status](docs/launch-status.md) · [Security](SECURITY.md)
 
+**0.11.0 is a signed preview.** Full launch remains pending installed-app upgrade, offline import/export, live browser permission, Intel runtime, and real Electron update checks. Export a backup and quit the existing app before manually upgrading from 0.10. See the [preview acceptance checklist](docs/preview-acceptance.md).
+
 Press **⌘O**, then type. Commands, open tabs, saved links, notes, tags, and recent browser history share one search. **Enter** runs the selected command, switches to an open tab, or opens a saved/visited page. **⌘K** shows actions for that result. Pasting a URL offers **Save this link**. Saving with a note and choosing multiple tabs happen inside the same panel.
 
 The floating launcher opens on the display containing the pointer, including over fullscreen apps, and stays out of the Dock. Click elsewhere to hide it. Escape closes actions, goes back from an editor or scope, then dismisses root search. Unsaved edits require an explicit discard. The launcher remembers context for 60 seconds; after that it resets root search unless a draft is open. **⌘O** toggles it. The old **⌘⇧O** default migrates automatically; custom shortcuts remain unchanged and can be edited through the searchable Settings command.
