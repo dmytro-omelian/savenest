@@ -31,7 +31,7 @@ Both interfaces use the same library path and Keychain services; startup rejects
 
 ## Native-to-Electron preview migration
 
-Version 0.11.1, native build 35, is the prepared migration target. Verification is still pending; do not describe migration as tested until the corresponding results are recorded in the [preview checklist](preview-acceptance.md).
+Version 0.11.1, native build 35, is the prepared migration target. Isolated Apple Silicon archive installation and corrupted-signature rejection passed; the [preview checklist](preview-acceptance.md) records the evidence and remaining acceptance scope. Do not treat archive installation as proof of library or account preservation.
 
 Only newly prepared archives that meet all of these conditions are eligible:
 
