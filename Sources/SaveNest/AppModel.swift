@@ -44,6 +44,7 @@ enum AppLaunch {
 
 @MainActor
 final class AppModel: ObservableObject {
+    lazy var notes = ObsidianNotes(preview: readerPreview, lab: readerLive)
     let updater = AppUpdater()
     let account = AccountController()
     let analytics = UsageAnalytics()
@@ -150,6 +151,14 @@ final class AppModel: ObservableObject {
     var closeTabSelection: (() -> Void)?
 
     var isPreview: Bool { AppLaunch.isPreview }
+    var readerLive: Bool {
+        #if DEBUG
+        return isPreview && ProcessInfo.processInfo.arguments.contains("--reader-live")
+        #else
+        return false
+        #endif
+    }
+    var readerPreview: Bool { isPreview && !readerLive }
     init() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         file = LibraryFile(url: support.appendingPathComponent("SaveNest/library.json"))
@@ -314,6 +323,7 @@ final class AppModel: ObservableObject {
     }
     func capture(action: CaptureAction = .quick, sourceApplication: NSRunningApplication? = nil) {
         if action == .search { showTabSearch?(); return }
+        if action == .reader { showTabSearch?(); return }
         if action == .duplicates { closeDuplicateTabs(); return }
         if let draft { showCaptureEditor?(draft); return }
         guard !isCapturing else { return }

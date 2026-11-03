@@ -28,6 +28,14 @@ Clipboard offers are off by default. If you enable them, SaveNest watches for a 
 
 ## Connections made by the app
 
+### Read & note
+
+The reading workspace opens the Original website by default. Choosing the optional Reader view extracts article content from the explicitly requested browser tab. Extracted content stays in memory and is not uploaded to SaveNest. Browser form fields and editable regions are excluded. Reader images contact their source websites only after **Load images**; the Original view loads the website and its resources in a separate temporary browser session. Those websites receive ordinary connection information and may process interactions made within that view. Existing browser cookies are not imported.
+
+After you choose an Obsidian vault, page notes are ordinary Markdown files containing the source URL. SaveNest retains a local file-association index and pending recovery drafts in Application Support. Vault files may be synced by iCloud, Obsidian Sync, or another service you independently configure. SaveNest does not upload them or include them in its library JSON backups. These notes, URLs, and article contents are not sent with usage reporting.
+
+### Existing app connections
+
 SaveNest may request a website’s favicon or public homepage to display its icon. These requests do not use your browser cookies or a favicon proxy, but the destination receives ordinary connection information such as your IP address. Icons are cached locally and refreshed when requested after seven days. Cached files may remain on your Mac until evicted by the bounded cache or removed locally.
 
 Update checks contact savenest.app; release downloads are hosted on GitHub. These services receive ordinary request information. Opening a saved page uses your browser. Sharing by email uses the email application you choose and sends the content you explicitly share to your selected recipient.

@@ -3,10 +3,10 @@ const { spawn } = require('node:child_process');
 const { EventEmitter } = require('node:events');
 
 class NativeClient extends EventEmitter {
-  constructor(executable, { preview = false } = {}) {
+  constructor(executable, { preview = false, readerLive = false } = {}) {
     super();
     this.pending = new Map(); this.sequence = 0; this.closed = false; this.buffer = '';
-    this.child = spawn(executable, ['--electron-bridge', ...(preview ? ['--ui-preview'] : [])], { stdio: ['pipe', 'pipe', 'pipe'] });
+    this.child = spawn(executable, ['--electron-bridge', ...(preview ? ['--ui-preview'] : []), ...(preview && readerLive ? ['--reader-live'] : [])], { stdio: ['pipe', 'pipe', 'pipe'] });
     this.child.stdout.setEncoding('utf8');
     this.child.stdout.on('data', chunk => this.receive(chunk));
     // Never send helper diagnostics or account URLs to the renderer or console.
@@ -30,7 +30,7 @@ class NativeClient extends EventEmitter {
       const pending = this.pending.get(message.id);
       if (!pending) continue;
       clearTimeout(pending.timer); this.pending.delete(message.id);
-      if (message.ok) pending.resolve(true);
+      if (message.ok) pending.resolve(message.result ?? true);
       else pending.reject(new Error(message.error || 'SaveNest could not finish this action.'));
     }
   }

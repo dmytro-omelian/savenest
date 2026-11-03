@@ -8,6 +8,7 @@ let editingID = null, captureID = null, editorBaseline = '', editorSaving = fals
 let captureSelected = new Set(), selectionSaving = false, actionItems = [], filteredActions = [], actionIndex = 0, fatal = false;
 let lastNativeMessage = '', noticeSource = '', discardAction = null;
 const symbols = {
+  reader: 'M3 4h18v16H3zM13 4v16M6 8h4M6 12h4M16 8h2M16 12h2',
   nest: 'M4 8l8 5 8-5M4 13l8 5 8-5M6 18l6 4 6-4M9 4l3 2 3-2',
   bookmark: 'M6 3h12v18l-6-4-6 4z', note: 'M5 3h14v18H5zM8 8h8M8 12h8M8 16h5',
   tabs: 'M3 7h18v14H3zM6 3h12M3 11h18', plus: 'M12 5v14M5 12h14',
@@ -144,6 +145,10 @@ function renderRoot() {
       check.onclick = event => event.stopPropagation();
       check.onchange = () => { check.checked ? selected.add(item.id) : selected.delete(item.id); focusedID = item.id; updateSelection(); focusSearch(); };
       accessory.append(check);
+      const read = el('button', 'row-read'); read.append(icon('reader')); read.title = 'Read & note'; read.setAttribute('aria-label', 'Read & note: ' + item.title);
+      read.onclick = event => { event.stopPropagation(); void run('readerOpen', { ids: [item.id] }); };
+      read.ondblclick = event => event.stopPropagation();
+      accessory.append(read);
     } else accessory.append(el('span', 'source-label', 'Command'));
     if (index < 9) accessory.append(el('kbd', '', '⌘' + (index + 1)));
     const more = el('button', 'row-more', '⋯'); more.setAttribute('aria-label', 'Actions for ' + item.title); more.tabIndex = -1;
@@ -175,7 +180,7 @@ function renderSources() {
 }
 function openSources() { $('route-title').textContent = 'Browser history sources'; setRoute('sources'); renderSources(); $('history-enabled').focus(); }
 function renderState() {
-  document.documentElement.dataset.appearance = state.appearance || 'black'; $('preview').hidden = !state.preview;
+  document.documentElement.dataset.appearance = state.appearance || 'black'; $('preview').hidden = !state.preview; $('preview').textContent = state.notesStatus?.readerTest ? 'Reader test' : 'Preview';
   if (pendingQuery === state.query) pendingQuery = null;
   if (pendingQuery === null && $('search').value !== state.query) $('search').value = state.query;
   $('onboarding').hidden = route !== 'root' || !state.onboarding;
@@ -222,6 +227,7 @@ function showActions() {
   if (single && rows[0].kind === 'command') actionItems.push({ title: 'Run command', key: '↵', run: () => execute(rows[0]) });
   else {
     if (single) add(rows[0].isOpen ? 'Switch to tab' : 'Open link', 'open', rows, '↵');
+    if (single) add('Read & note', 'readerOpen', rows);
     add('Save to library', 'save', rows.filter(row => !row.isSaved), '⌘S');
     if (single) actionItems.push({ title: 'Edit title, note & tags', key: '⌘E', run: () => openEditor(rows[0]) });
     add(single ? 'Copy URL' : 'Copy URLs', 'copy', rows, '⇧⌘C');

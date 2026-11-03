@@ -3,17 +3,18 @@ import Carbon
 import SwiftUI
 
 enum CaptureAction: String, CaseIterable, Identifiable {
-    case quick, note, selected, window, search, duplicates
+    case quick, note, selected, window, search, duplicates, reader
     var id: String { rawValue }
     var title: String {
-        switch self { case .quick: return "Save link"; case .note: return "Save with a note"; case .selected: return "Save selected tabs"; case .window: return "Save all tabs in window"; case .search: return "Open SaveNest"; case .duplicates: return "Close duplicate tabs" }
+        switch self { case .quick: return "Save link"; case .note: return "Save with a note"; case .selected: return "Save selected tabs"; case .window: return "Save all tabs in window"; case .search: return "Open SaveNest"; case .duplicates: return "Close duplicate tabs"; case .reader: return "Read & note current tab" }
     }
     var defaultShortcut: CaptureShortcut {
+        if self == .reader { return .unassigned }
         if self == .search { return CaptureShortcut(keyCode: 31, modifiers: UInt32(cmdKey), character: "O") }
         if self == .duplicates { return CaptureShortcut(keyCode: 2, modifiers: UInt32(cmdKey | shiftKey), character: "D") }
         let modifiers: Int
         switch self {
-        case .quick, .search, .duplicates: modifiers = cmdKey | shiftKey
+        case .quick, .search, .duplicates, .reader: modifiers = cmdKey | shiftKey
         case .note: modifiers = cmdKey | optionKey
         case .selected: modifiers = cmdKey | shiftKey | controlKey
         case .window: modifiers = cmdKey | shiftKey | optionKey
@@ -34,10 +35,13 @@ struct CaptureShortcut: Codable, Equatable {
     var keyCode: UInt32
     var modifiers: UInt32
     var character: String
+    static let unassigned = CaptureShortcut(keyCode: UInt32.max, modifiers: 0, character: "")
+    var isAssigned: Bool { keyCode != UInt32.max && modifiers != 0 && !character.isEmpty }
     static let standard = CaptureShortcut(keyCode: 40, modifiers: UInt32(cmdKey | shiftKey), character: "K")
     static let legacySearch = CaptureShortcut(keyCode: 31, modifiers: UInt32(cmdKey | shiftKey), character: "O")
     var label: String {
-        (modifiers & UInt32(controlKey) != 0 ? "⌃" : "") +
+        guard isAssigned else { return "Not assigned" }
+        return (modifiers & UInt32(controlKey) != 0 ? "⌃" : "") +
         (modifiers & UInt32(optionKey) != 0 ? "⌥" : "") +
         (modifiers & UInt32(shiftKey) != 0 ? "⇧" : "") +
         (modifiers & UInt32(cmdKey) != 0 ? "⌘" : "") + character
@@ -78,7 +82,7 @@ final class GlobalShortcut {
         unregister()
         var failed: [CaptureAction] = []
         for action in CaptureAction.allCases {
-            guard let shortcut = shortcuts[action] else { continue }
+            guard let shortcut = shortcuts[action], shortcut.isAssigned else { continue }
             var reference: EventHotKeyRef?
             let id = EventHotKeyID(signature: 0x534E5354, id: action.hotkeyID)
             if RegisterEventHotKey(shortcut.keyCode, shortcut.modifiers, id, GetApplicationEventTarget(), 0, &reference) == noErr, let reference {

@@ -10,6 +10,7 @@ final class ElectronBridge {
     private let model: AppModel
     private var subscriptions = Set<AnyCancellable>()
     private var pendingSnapshot: DispatchWorkItem?
+    private var readerSources: [String: [String: Any]] = [:]
     private var previousApplication: NSRunningApplication?
     private(set) var panelVisible = false
 
@@ -31,6 +32,7 @@ final class ElectronBridge {
         model.hotkey.action = { [weak self] action in
             guard let self else { return }
             if action == .search { self.event("toggle") }
+            else if action == .reader { self.event("readerCurrent") }
             else { self.model.capture(action: action, sourceApplication: self.panelVisible ? self.previousApplication : nil) }
         }
         model.showCaptureEditor = { [weak self] _ in self?.event("show"); self?.scheduleSnapshot() }
@@ -38,6 +40,7 @@ final class ElectronBridge {
         model.showTabSelection = { [weak self] _ in self?.event("show"); self?.scheduleSnapshot() }
         model.closeTabSelection = { [weak self] in self?.event("selectionClosed") }
         model.objectWillChange.sink { [weak self] in self?.scheduleSnapshot() }.store(in: &subscriptions)
+        model.notes.objectWillChange.sink { [weak self] in self?.scheduleSnapshot() }.store(in: &subscriptions)
         model.tabSearch.objectWillChange.sink { [weak self] in self?.scheduleSnapshot() }.store(in: &subscriptions)
         model.$library.dropFirst().receive(on: DispatchQueue.main).sink { [weak self] library in
             self?.model.tabSearch.updateLibrary(library.links)
@@ -115,7 +118,7 @@ final class ElectronBridge {
             "historySources": search.historySources.map { ["browser": $0.source.browser, "profile": $0.source.profile, "count": $0.count, "issue": $0.issue ?? ""] as [String: Any] },
             "captureDraft": model.draft.map { self.linkFields($0.link) } as Any? ?? NSNull(),
             "captureSelection": model.tabSelection.map { ["id": $0.id.uuidString, "links": $0.links.map(self.linkFields)] as [String: Any] } as Any? ?? NSNull(),
-            "tags": model.allTags
+            "tags": model.allTags, "notesStatus": model.notes.status()
         ]])
     }
     private func linkFields(_ link: SavedLink) -> [String: Any] {
@@ -134,13 +137,20 @@ final class ElectronBridge {
         var tags: [String]?
         var action: String?
         var enabled: Bool?
+        var documentId: String?
+        var text: String?
+        var revision: String?
     }
 
     private func receive(_ data: Data) async {
         guard let request = try? JSONDecoder().decode(Request.self, from: data) else { return }
         do {
-            try await perform(request)
-            Self.write(["id": request.id, "ok": true])
+            if let result = try await performReader(request) {
+                Self.write(["id": request.id, "ok": true, "result": result])
+            } else {
+                try await perform(request)
+                Self.write(["id": request.id, "ok": true])
+            }
         } catch {
             Self.write(["id": request.id, "ok": false, "error": error.localizedDescription])
         }
@@ -150,6 +160,67 @@ final class ElectronBridge {
     private struct Failure: LocalizedError {
         let message: String
         var errorDescription: String? { message }
+    }
+
+    private func rememberReaderSource(_ source: [String: Any]) {
+        guard let url = source["url"] as? String else { return }
+        if readerSources.count >= 64 { readerSources.removeAll() }
+        readerSources[url] = source
+    }
+
+    private func performReader(_ request: Request) async throws -> [String: Any]? {
+        switch request.command {
+        case "readerCurrent":
+            var source = try await ReaderCapture.current(using: model.captureService, sourceApplication: panelVisible ? previousApplication : nil, preview: model.readerPreview)
+            if let url = source["url"] as? String {
+                source["quickNote"] = model.library.links.first(where: { Library.identity($0.url) == Library.identity(url) })?.note ?? ""
+            }
+            rememberReaderSource(source)
+            source.removeValue(forKey: "readerTarget")
+            return source
+        case "readerOpen":
+            guard let id = request.ids?.first, let item = model.tabSearch.results.first(where: { $0.id == id }) else {
+                throw Failure(message: "This page changed. Refresh the list and try again.")
+            }
+            var source = await ReaderCapture.selected(item, preview: model.readerPreview)
+            source["quickNote"] = item.link?.note ?? ""
+            rememberReaderSource(source)
+            source.removeValue(forKey: "readerTarget")
+            return source
+        case "readerExtract":
+            guard let url = request.url, let source = readerSources[url] else {
+                throw Failure(message: "Reopen this page to use Reader.")
+            }
+            var result = await ReaderCapture.extract(source, preview: model.readerPreview)
+            result.removeValue(forKey: "readerTarget")
+            return result
+        case "notesStatus": return model.notes.status()
+        case "notesChooseVault": return try model.notes.chooseVault()
+        case "notesChooseFolder": return try model.notes.chooseFolder()
+        case "noteLoad":
+            guard let url = request.url, url.count <= 16_384 else { throw Failure(message: "Choose a valid page first.") }
+            var result = try model.notes.load(url: url, title: String((request.title ?? "Untitled page").prefix(10_000)))
+            result["quickNote"] = model.library.links.first(where: { Library.identity($0.url) == Library.identity(url) })?.note ?? ""
+            return result
+        case "noteSave", "noteDraft", "noteCheck", "noteSaveCopy", "noteOpen", "noteReveal", "noteLocate", "noteDiscardDraft":
+            guard let id = request.documentId, UUID(uuidString: id) != nil else { throw Failure(message: "Reopen this note and try again.") }
+            if let text = request.text, text.count > NoteFiles.maximumCharacters { throw Failure(message: "This note reached the editor size limit.") }
+            switch request.command {
+            case "noteSave", "noteDraft":
+                guard let text = request.text, let revision = request.revision, revision.count <= 100 else { throw Failure(message: "The note save request was incomplete.") }
+                if request.command == "noteSave" { return try model.notes.save(id: id, text: text, revision: revision) }
+                try model.notes.draft(id: id, text: text, revision: revision); return ["saved": true]
+            case "noteCheck": return try model.notes.check(id: id, revision: request.revision ?? "")
+            case "noteSaveCopy":
+                guard let text = request.text else { throw Failure(message: "There is no text to save.") }
+                return try model.notes.saveCopy(id: id, text: text)
+            case "noteOpen": try model.notes.open(id: id); return ["opened": true]
+            case "noteReveal": try model.notes.reveal(id: id); return ["opened": true]
+            case "noteLocate": return try model.notes.locate(id: id)
+            default: try model.notes.discardDraft(id: id); return ["discarded": true]
+            }
+        default: return nil
+        }
     }
 
     private func perform(_ request: Request) async throws {

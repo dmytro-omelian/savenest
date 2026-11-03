@@ -2,6 +2,8 @@
 
 [Back to the project](../README.md) · [Privacy](privacy.md)
 
+Local development now includes a [Read & note workspace](read-and-note.md): article preview beside an Obsidian Markdown file. This feature has not been published yet.
+
 ## Launcher
 
 Press **⌘O**, then type. Commands, open tabs, saved links, notes, tags, and recent browser history share one search. **Enter** runs the selected command, switches to an open tab, or opens a saved/visited page. **⌘K** shows actions for that result. Pasting a URL offers **Save this link**. Saving with a note and choosing multiple tabs happen inside the same panel.

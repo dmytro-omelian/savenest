@@ -288,6 +288,7 @@ struct SettingsView: View {
                 Button("Open Automation Settings ↗") { NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")!) }.buttonStyle(.link).font(.system(size: 11))
             }
         case .library:
+            ObsidianNotesSettings(notes: model.notes)
             VStack(alignment: .leading, spacing: 13) {
                 fieldLabel("YOUR LIBRARY")
                 Button("Archive all links…") { archiveIDs = model.activeIDs }

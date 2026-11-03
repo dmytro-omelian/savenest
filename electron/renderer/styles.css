@@ -119,3 +119,7 @@ dialog::backdrop { background: #0002; }
 #usage-notice p { margin: 0 0 6px; }
 #usage-notice div { display: flex; gap: 16px; }
 #usage-notice button { font-size: 11px; color: var(--ink); }
+
+.row-read { display: grid; place-items: center; color: var(--muted); padding: 5px; border-radius: 5px; }
+.row-read svg { width: 17px; height: 17px; }
+.row-read:hover, .row-read:focus-visible { color: var(--accent); background: var(--raised); }

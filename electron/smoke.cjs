@@ -101,6 +101,9 @@ exports.run = async ({ win, native, root, show, toggle }) => {
   assert.equal(win.isVisible(), true);
   await key('e', { metaKey: true }); await route('editor');
   await js("document.getElementById('edit-title').value='Launcher round trip'; document.getElementById('edit-note').value='Edited note'");
+  // A second local test app may own focus; toggle intentionally hides only a focused launcher.
+  require('electron').app.focus({ steal: true }); win.focus();
+  await wait(() => win.isFocused(), 'focus launcher before toggle');
   toggle(); await wait(() => !win.isVisible(), 'hide with unfinished draft');
   await show(); await route('editor');
   assert.equal(await js("document.getElementById('edit-note').value"), 'Edited note');
@@ -151,6 +154,9 @@ exports.run = async ({ win, native, root, show, toggle }) => {
   await key('Escape'); await type('');
   await key('Escape'); await wait(() => !win.isVisible(), 'Escape dismisses root launcher');
   await show(); await wait(() => win.isVisible() && win.isFocused(), 'reopen and focus launcher');
+  // A second local test app may own focus; toggle intentionally hides only a focused launcher.
+  require('electron').app.focus({ steal: true }); win.focus();
+  await wait(() => win.isFocused(), 'focus launcher before toggle');
   toggle(); await wait(() => !win.isVisible(), 'hotkey toggle hides launcher');
   await show();
   assert.deepEqual(errors, []);
