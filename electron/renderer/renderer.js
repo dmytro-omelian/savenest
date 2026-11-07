@@ -255,13 +255,20 @@ $('editor-form').onsubmit = async event => {
   event.preventDefault(); if (editorSaving) return;
   editorSaving = true; $('editor-error').textContent = ''; updateFooter();
   const values = formValues(), tags = values.tags.split(',').map(value => value.trim()).filter(Boolean);
+  const dismissAfterSave = !editingID;
   try {
     const request = { title: values.title, note: values.note, tags };
     if (captureID) Object.assign(request, { command: 'saveDraft', ids: [captureID] });
     else if (editingID) Object.assign(request, { command: 'edit', ids: [editingID] });
     else Object.assign(request, { command: 'add', url: values.url });
     const ok = await window.savenest.command(request);
-    if (ok) { editorBaseline = JSON.stringify(formValues()); captureID = null; editingID = null; setRoute('root'); renderRoot(); focusSearch(); }
+    if (ok) {
+      editorBaseline = JSON.stringify(formValues()); captureID = null; editingID = null;
+      setRoute('root'); renderRoot(); focusSearch();
+      // Finish quick-add/capture flows only after persistence succeeds. Editing
+      // an existing result stays in the launcher so browsing can continue.
+      if (dismissAfterSave) await run('dismiss');
+    }
   } catch (error) { $('editor-error').textContent = cleanError(error); }
   finally { editorSaving = false; updateFooter(); }
 };

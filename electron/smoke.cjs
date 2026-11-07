@@ -88,6 +88,8 @@ exports.run = async ({ win, native, root, show, toggle }) => {
   assert.equal(await js("document.getElementById('edit-url').value"), 'https://example.com/launcher-smoke');
   await js("document.getElementById('edit-title').value='<img src=x onerror=alert(1)>'; document.getElementById('edit-note').value='Round trip note'; document.getElementById('edit-tags').value='Launcher, Test'");
   await key('Enter', { metaKey: true }); await route('root');
+  await wait(() => !win.isVisible(), 'successful add dismisses launcher');
+  await show(); await route('root');
   await wait(() => state.rows.some(row => row.url.endsWith('/launcher-smoke')), 'save URL through inline editor');
   let item = state.rows.find(row => row.url.endsWith('/launcher-smoke'));
   assert.deepEqual(item.tags, ['Launcher', 'Test']); assert.equal(item.note, 'Round trip note');
@@ -110,6 +112,7 @@ exports.run = async ({ win, native, root, show, toggle }) => {
   await key('Escape'); await wait(() => js("document.getElementById('discard-dialog').open"), 'dirty draft guard');
   await js("document.getElementById('keep-editing').click()");
   await key('Enter', { metaKey: true }); await route('root');
+  assert.equal(win.isVisible(), true, 'editing an existing link keeps launcher open');
   await type('launcher round trip'); await wait(() => state.rows.some(row => row.note === 'Edited note'), 'edited link searchable');
   item = state.rows.find(row => row.note === 'Edited note');
   await native.request({ command: 'favorite', ids: [item.id] }); await wait(() => state.rows[0]?.favorite, 'favorite');
@@ -126,6 +129,8 @@ exports.run = async ({ win, native, root, show, toggle }) => {
   assert.equal(state.canRestartForUpdate, false, 'native capture drafts block update restarts');
   await js("document.getElementById('edit-note').value='Captured inside the launcher'");
   await key('Enter', { metaKey: true }); await route('root');
+  await wait(() => !win.isVisible(), 'successful save-with-note dismisses launcher');
+  await show(); await route('root');
   await type('Captured inside the launcher'); await wait(() => state.rows.some(row => row.note === 'Captured inside the launcher'), 'native capture saved in same panel');
   await type('save selected'); await key('Enter'); await route('selection');
   assert.equal(state.canRestartForUpdate, false, 'native tab selection blocks update restarts');
